@@ -54,7 +54,6 @@ int i2c_slave_init()
 int i2c_master_init()
 {
     i2c_master_config_t master_config;
-    uint32_t sourceClock;
 
     I2C_MasterGetDefaultConfig(&master_config);
     master_config.baudRate_Bps = I2C0_BAUDRATE;
