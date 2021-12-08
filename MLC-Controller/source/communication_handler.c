@@ -2,6 +2,8 @@
 #include "fsl_clock.h"
 #include "fsl_port.h"
 #include "communication_handler.h"
+#include "fsl_debug_console.h"
+
 
 
 
@@ -63,4 +65,32 @@ int i2c_master_init()
 
 /* Slave task*/
 
+void communication_task(void* pvParameter)
+{
+	led_config_type tx_data;
+	tx_data.control_mode = 0;
+	led_config_type tx_buff;
+	tx_buff.control_mode = 0;
+
+
+
+	i2c_pin_config();
+	if(pvParameter == true){
+		i2c_master_init();
+		while(1)
+		{
+			if(xQueueReceive(communication_queue, &tx_buff, 0)==pdPASS){
+				if(tx_buff.control_mode!=0){
+					tx_data.control_mode = tx_buff.control_mode;
+				}
+			}
+		}
+	}
+	else if (pvParameter == false){
+		i2c_slave_init();
+		while(1){
+		PRINTF("False");
+		}
+	}
+}
 
