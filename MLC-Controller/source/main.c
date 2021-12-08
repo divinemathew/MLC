@@ -32,6 +32,7 @@
  * @file    MLC-Controller.c
  * @brief   Application entry point.
  */
+#include <comm_handler.h>
 #include <stdio.h>
 #include "board.h"
 #include "peripherals.h"
@@ -47,7 +48,6 @@
 //#include "FreeRTOS.h"
 #include "FreeRTOSConfig.h"
 #include "pattern_executor.h"
-#include "communication_handler.h"
 #include "ui_handler.h"
 
 #define communication_task_PRIORITY  (configMAX_PRIORITIES - 2)

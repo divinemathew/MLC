@@ -5,6 +5,7 @@
 #include "fsl_i2c_freertos.h"
 
 #define SLAVE_ADDRESS 				0x2D
+#define CONTROL_MODE_OFFSET			0x11
 #define I2C0_BASEADDR 				I2C0
 #define I2C0_CLK_FREQ         		CLOCK_GetFreq(I2C0_CLK_SRC)
 #define I2C_DATA_LENGTH            	34U
@@ -15,8 +16,7 @@
 static xQueueHandle communication_queue;
 static xQueueHandle slave_status_queue;
 
-static i2c_rtos_handle_t i2c_master;
-static i2c_rtos_handle_t i2c_slave;
+
 
 int i2c_slave_init(void);
 int i2c_pin_config(void);
