@@ -141,7 +141,9 @@ void communication_task(void* pvParameter)
 	}
 	else if (pvParameter == false){
 		i2c_slave_init();
+		uint8_t rx_buff[I2C_DATA_LEN];
 		while(1){
+
 
 		PRINTF("False");
 		}
