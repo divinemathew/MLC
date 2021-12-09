@@ -15,6 +15,7 @@
 #define I2C0_SLAVE_HOLD_TIME_NS 	4000U
 #define WAIT_TIME                   10U
 #define I2C0_BAUDRATE               100000U
+#define I2C_DATA_LEN				35U
 
 static xQueueHandle communication_queue;
 static xQueueHandle slave_status_queue;
