@@ -72,7 +72,7 @@ int main(void) {
 
     PRINTF("Hello World\n");
     communication_queue = xQueueCreate(1, sizeof (led_config_type));
-    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)true, communication_task_PRIORITY, NULL)!=pdPASS){
+    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)false, communication_task_PRIORITY, NULL)!=pdPASS){
     	PRINTF("\r\nCommunication Task Creation failed");
     }
 
