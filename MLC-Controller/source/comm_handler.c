@@ -1,7 +1,9 @@
+#include <comm_handler.h>
 #include "fsl_i2c.h"
 #include "fsl_clock.h"
 #include "fsl_port.h"
-#include "communication_handler.h"
+#include "fsl_debug_console.h"
+
 
 
 
@@ -51,6 +53,15 @@ int i2c_slave_init()
     return true;
 }
 
+void i2c_write(uint8_t offset,uint8_t *data,uint8_t size)
+{
+	i2c_master_transfer_t masterXfer;
+	masterXfer.flags=kI2C_TransferDefaultFlag;
+	masterXfer.slaveAddress=SLAVE_ADDRESS;
+
+}
+
+
 int i2c_master_init()
 {
     i2c_master_config_t master_config;
@@ -63,4 +74,34 @@ int i2c_master_init()
 
 /* Slave task*/
 
+void communication_task(void* pvParameter)
+{
+	led_config_type tx_data;
+	tx_data.control_mode = 0;
+	led_config_type tx_buff;
+	tx_buff.control_mode = 0;
+
+	i2c_pin_config();
+	if(pvParameter == true){
+		i2c_master_init();
+		while(1)
+		{
+			if(xQueueReceive(communication_queue, &tx_buff, 0)==pdPASS){
+				if(tx_buff.control_mode!=0){
+					i2c_write(CONTROL_MODE_OFFSET,)
+					I2C_MasterTransferBlocking(I2C0_BASEADDR, &masterXfer);
+					/*Transfer the control bit to PATTERN QUEUE*/
+				}
+				else if(tx_buff.control_mode==0){
+				}
+			}
+		}
+	}
+	else if (pvParameter == false){
+		i2c_slave_init();
+		while(1){
+		PRINTF("False");
+		}
+	}
+}
 

@@ -32,6 +32,7 @@
  * @file    MLC-Controller.c
  * @brief   Application entry point.
  */
+#include <comm_handler.h>
 #include <stdio.h>
 #include "board.h"
 #include "peripherals.h"
@@ -40,28 +41,23 @@
 #include "MK64F12.h"
 #include "fsl_debug_console.h"
 #include "FreeRTOS.h"
+#include "task.h"
+#include "queue.h"
+#include "timers.h"
+
+//#include "FreeRTOS.h"
 #include "FreeRTOSConfig.h"
 #include "pattern_executor.h"
-#include "communication_handler.h"
 #include "ui_handler.h"
 
-/* TODO: insert other include files here. */
+#define communication_task_PRIORITY  (configMAX_PRIORITIES - 2)
+#define master_task_PRIORITY (configMAX_PRIORITIES - 2)
 
-/* TODO: insert other definitions and declarations here. */
 
+void communication_task(void *pvParameters);
 
-typedef struct {
-	uint8_t start_color[3];
-	uint8_t stop_color[3];
-	uint8_t step_value;
-	uint8_t step_mode;
-	uint8_t no_of_cycles;
-	uint16_t color_change_rate;
-	uint16_t refresh_rate;
-	uint8_t color_scheme;
-	uint8_t control_mode;
-	uint8_t current_color[3];
-} led_config_type;
+ //xQueueHandle communication_queue;
+
 /*
  * @brief   Application entry point.
  */
@@ -73,7 +69,22 @@ int main(void) {
     BOARD_InitBootPeripherals();
     BOARD_InitDebugConsole();
 
+
     PRINTF("Hello World\n");
+    communication_queue = xQueueCreate(1, sizeof (led_config_type));
+    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)true, communication_task_PRIORITY, NULL)!=pdPASS){
+    	PRINTF("\r\nCommunication Task Creation failed");
+    }
+
+
+    vTaskStartScheduler();
+	for (; ;) {
+	}
+
 
     return 0 ;
 }
+
+
+
+
