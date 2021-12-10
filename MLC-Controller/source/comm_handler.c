@@ -6,6 +6,8 @@
 
 
 
+uint8_t slave_buff[I2C_DATA_LENGTH];
+uint8_t slave_ID[2] ={0xBE,0xEF};
 
 
 int i2c_pin_config(void)
@@ -96,6 +98,44 @@ void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
 }
 
 
+
+static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void *userData)
+{
+
+    switch (xfer->event)
+    {
+        /*  Address match event */
+        case kI2C_SlaveAddressMatchEvent:
+            xfer->data     = NULL;
+            xfer->dataSize = 0;
+            break;
+        /*  Transmit request */
+        case kI2C_SlaveTransmitEvent:
+            /*  Update information for transmit process */
+            xfer->data     = &slave_buff[2];
+            xfer->dataSize = slave_buff[1];
+            break;
+
+        /*  Receive request */
+        case kI2C_SlaveReceiveEvent:
+            /*  Update information for received process */
+            xfer->data     = slave_buff;
+            xfer->dataSize = I2C_DATA_LENGTH;
+            break;
+
+        /*  Transfer done */
+        case kI2C_SlaveCompletionEvent:
+            g_SlaveCompletionFlag = true;
+            xfer->data            = NULL;
+            xfer->dataSize        = 0;
+            break;
+
+        default:
+            g_SlaveCompletionFlag = false;
+            break;
+    }
+}
+
 int i2c_master_init()
 {
     i2c_master_config_t master_config;
@@ -105,6 +145,8 @@ int i2c_master_init()
     I2C_MasterInit(I2C0_BASEADDR, &master_config, I2C0_CLK_FREQ);
     return true;
 }
+
+
 
 /* Slave task*/
 
@@ -140,12 +182,15 @@ void communication_task(void* pvParameter)
 		}
 	}
 	else if (pvParameter == false){
+		i2c_slave_handle_t slave_handle;
+	    memset(&slave_handle, 0, sizeof(slave_handle));
+		I2C_SlaveTransferCreateHandle(I2C0_BASE, &slave_handle, i2c_slave_callback, NULL);
 		i2c_slave_init();
-		uint8_t rx_buff[I2C_DATA_LEN];
+
+		I2C_SlaveTransferNonBlocking(I2C0_BASE, &slave_handle, kI2C_SlaveCompletionEvent | kI2C_SlaveTransmitEvent | kI2C_SlaveReceiveEvent);
 		while(1){
 
 
-		PRINTF("False");
 		}
 	}
 }
