@@ -1,3 +1,6 @@
+#ifndef COMM_HANDLER_H_
+#define COMM_HANDLER_H_
+
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
@@ -13,26 +16,13 @@
 #define WAIT_TIME                   10U
 #define I2C0_BAUDRATE               100000U
 
-static xQueueHandle communication_queue;
-static xQueueHandle slave_status_queue;
-
-
+extern xQueueHandle communication_queue;
+extern xQueueHandle slave_status_queue;
 
 int i2c_slave_init(void);
 int i2c_pin_config(void);
 void communication_task(void* pvParameter);
 
 
-typedef struct {
-	uint8_t start_color[3];
-	uint8_t stop_color[3];
-	uint8_t step_value;
-	uint8_t step_mode;
-	uint8_t no_of_cycles;
-	uint16_t color_change_rate;
-	uint16_t refresh_rate;
-	uint8_t color_scheme;
-	uint8_t control_mode;
-	uint8_t current_color[3];
-} led_config_type;
 
+#endif /* COMM_HANDLER_H_ */
