@@ -1,3 +1,4 @@
+#include "mlc_common.h"
 #include <comm_handler.h>
 #include "fsl_i2c.h"
 #include "fsl_clock.h"
@@ -88,8 +89,8 @@ void communication_task(void* pvParameter)
 		{
 			if(xQueueReceive(communication_queue, &tx_buff, 0)==pdPASS){
 				if(tx_buff.control_mode!=0){
-					i2c_write(CONTROL_MODE_OFFSET,)
-					I2C_MasterTransferBlocking(I2C0_BASEADDR, &masterXfer);
+					//i2c_write(CONTROL_MODE_OFFSET,)
+					//I2C_MasterTransferBlocking(I2C0_BASEADDR, &masterXfer);
 					/*Transfer the control bit to PATTERN QUEUE*/
 				}
 				else if(tx_buff.control_mode==0){

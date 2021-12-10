@@ -7,8 +7,8 @@
  * Revision History:
  *	- 091221 ATG : Creation Date
  */
-#ifndef CALC_H_
-#define CALC_H_
+#ifndef MLC_COMMON_H_
+#define MLC_COMMON_H_
 
 /* Freescale includes. */
 #include "board.h"
@@ -26,8 +26,6 @@
 #include "FreeRTOSConfig.h"
 
 /* MLC includes. */
-#include "ui_handler.h"
-#include "comm_handler.h"
 #include "pattern_executor.h"
 
 /***********************************
@@ -39,8 +37,19 @@
 /***********************************
 * Typedefs and Enum Declarations
 ***********************************/
+typedef struct {
+	uint8_t start_color[3];
+	uint8_t stop_color[3];
+	uint8_t step_value;
+	uint8_t step_mode;
+	uint8_t no_of_cycles;
+	uint16_t color_change_rate;
+	uint16_t refresh_rate;
+	uint8_t color_scheme;
+	uint8_t control_mode;
+	uint8_t current_color[3];
+} led_config_type;
 
-// none
 
 /***********************************
 * Const Declarations
@@ -51,13 +60,13 @@
 /***********************************
 * Variable Declarations
 ***********************************/
-
-// none
+extern TimerHandle_t status_timer;
+extern TaskHandle_t ui_handler_handle;
 
 /***********************************
 * Prototypes
 ***********************************/
-
-
+void ui_handler_task(void *);
+void update_status(TimerHandle_t);
 
 #endif /* MLC_COMMON_H_ */
