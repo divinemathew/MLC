@@ -1,3 +1,4 @@
+#include "mlc_common.h"
 #include <comm_handler.h>
 #include "fsl_i2c.h"
 #include "fsl_clock.h"
@@ -170,6 +171,7 @@ void communication_task(void* pvParameter)
 					PRINTF("\r\nEntered In conTrol Mode");
 					i2c_write(CONTROL_MODE_OFFSET, &tx_buff.control_mode, 1, 1);
 					/*Transfer the control bit (CONFIG) to PATTERN QUEUE*/
+
 				}
 				else if(tx_buff.control_mode==0){
 					/*Transfer the CONFIG to PATTERN QUEUE*/
