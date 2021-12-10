@@ -66,7 +66,7 @@ int main(void) {
 
 
     communication_queue = xQueueCreate(1, sizeof (led_config_type));
-    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)true, communication_task_PRIORITY, NULL)!=pdPASS){
+    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)false, communication_task_PRIORITY, NULL)!=pdPASS){
     	PRINTF("\r\nCommunication Task Creation failed");
     }
 
@@ -74,6 +74,7 @@ int main(void) {
     xTaskCreate(ui_handler_task, "task1", configMINIMAL_STACK_SIZE + 100, NULL, 4, &ui_handler_handle);
     status_timer = xTimerCreate("AutoReload", STATUS_UPDATE_RATE, pdTRUE, 0, update_status);
     xTimerStart(status_timer, 0);
+
 
     vTaskStartScheduler();
 	for (; ;) {

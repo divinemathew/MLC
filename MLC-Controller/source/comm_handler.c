@@ -7,6 +7,8 @@
 
 
 
+uint8_t slave_buff[I2C_DATA_LENGTH];
+uint8_t slave_ID[2] ={0xBE,0xEF};
 
 
 int i2c_pin_config(void)
@@ -54,14 +56,86 @@ int i2c_slave_init()
     return true;
 }
 
-void i2c_write(uint8_t offset,uint8_t *data,uint8_t size)
+void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
 {
+
 	i2c_master_transfer_t masterXfer;
 	masterXfer.flags=kI2C_TransferDefaultFlag;
 	masterXfer.slaveAddress=SLAVE_ADDRESS;
+	masterXfer.direction=kI2C_Write;
+	masterXfer.dataSize=data_size;
+	masterXfer.subaddress=offset;
+	masterXfer.subaddressSize= add_size;
 
+	if(offset==CONTROL_MODE_OFFSET){
+		masterXfer.data = data;
+		//PRINTF("%d",masterXfer.data);
+		I2C_MasterTransferBlocking(I2C0,&masterXfer);
+
+	} else if(offset==SLAVEMODE_OFFSET){
+		uint8_t slave_id[2];
+		masterXfer.data=slave_id;
+		masterXfer.dataSize=2;
+		masterXfer.direction=kI2C_Read;
+		I2C_MasterTransferBlocking(I2C0, &masterXfer);
+		if(slave_id[0]==0xBE && slave_id[1]==0xEF){
+			xQueueSend(slave_status_queue,true,0);
+			PRINTF("Slave Found");
+			masterXfer.data=data;
+			masterXfer.dataSize=data_size;
+			masterXfer.direction=kI2C_Write;
+			masterXfer.subaddress=SLAVE_CONFIG_OFFSET;
+			masterXfer.subaddressSize=1;
+			I2C_MasterTransferBlocking(I2C0, &masterXfer);
+		} else{
+			PRINTF("No Slave Found");
+			xQueueSend(slave_status_queue,false,0);
+		}
+	}
+
+
+	//PRINTF("\r\n%d",((led_config_type*)data)->control_mode);
+	//PRINTF("\r\n%d",((led_config_type*)data)->start_color[0]);
 }
 
+
+
+static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void *userData)
+{
+
+    switch (xfer->event)
+    {
+        /*  Address match event */
+        case kI2C_SlaveAddressMatchEvent:
+            xfer->data     = NULL;
+            xfer->dataSize = 0;
+            break;
+        /*  Transmit request */
+        case kI2C_SlaveTransmitEvent:
+            /*  Update information for transmit process */
+            xfer->data     = &slave_buff[2];
+            xfer->dataSize = slave_buff[1];
+            break;
+
+        /*  Receive request */
+        case kI2C_SlaveReceiveEvent:
+            /*  Update information for received process */
+            xfer->data     = slave_buff;
+            xfer->dataSize = I2C_DATA_LENGTH;
+            break;
+
+        /*  Transfer done */
+        case kI2C_SlaveCompletionEvent:
+            g_SlaveCompletionFlag = true;
+            xfer->data            = NULL;
+            xfer->dataSize        = 0;
+            break;
+
+        default:
+            g_SlaveCompletionFlag = false;
+            break;
+    }
+}
 
 int i2c_master_init()
 {
@@ -73,6 +147,8 @@ int i2c_master_init()
     return true;
 }
 
+
+
 /* Slave task*/
 
 void communication_task(void* pvParameter)
@@ -80,28 +156,43 @@ void communication_task(void* pvParameter)
 	led_config_type tx_data;
 	tx_data.control_mode = 0;
 	led_config_type tx_buff;
-	tx_buff.control_mode = 0;
+	tx_buff.control_mode = 10;
+	tx_buff.color_change_rate=500;
+	tx_buff.color_scheme= 40;
+	tx_buff.start_color[0]=45;
 
 	i2c_pin_config();
 	if(pvParameter == true){
 		i2c_master_init();
 		while(1)
 		{
-			if(xQueueReceive(communication_queue, &tx_buff, 0)==pdPASS){
+			if(xQueueReceive(communication_queue, &tx_buff, 0)!=pdPASS){
 				if(tx_buff.control_mode!=0){
-					//i2c_write(CONTROL_MODE_OFFSET,)
-					//I2C_MasterTransferBlocking(I2C0_BASEADDR, &masterXfer);
-					/*Transfer the control bit to PATTERN QUEUE*/
+					PRINTF("\r\nEntered In conTrol Mode");
+					i2c_write(CONTROL_MODE_OFFSET, &tx_buff.control_mode, 1, 1);
+					/*Transfer the control bit (CONFIG) to PATTERN QUEUE*/
+
 				}
 				else if(tx_buff.control_mode==0){
+					/*Transfer the CONFIG to PATTERN QUEUE*/
+					i2c_write(SLAVEMODE_OFFSET, &tx_buff, 1, sizeof(led_config_type));
 				}
+			}
+			else {
+				__NOP();
 			}
 		}
 	}
 	else if (pvParameter == false){
+		i2c_slave_handle_t slave_handle;
+	    memset(&slave_handle, 0, sizeof(slave_handle));
+		I2C_SlaveTransferCreateHandle(I2C0_BASE, &slave_handle, i2c_slave_callback, NULL);
 		i2c_slave_init();
+
+		I2C_SlaveTransferNonBlocking(I2C0_BASE, &slave_handle, kI2C_SlaveCompletionEvent | kI2C_SlaveTransmitEvent | kI2C_SlaveReceiveEvent);
 		while(1){
-		PRINTF("False");
+
+
 		}
 	}
 }
