@@ -23,8 +23,8 @@
 extern xQueueHandle communication_queue;
 extern xQueueHandle slave_status_queue;
 
-int i2c_slave_init(void);
-int i2c_pin_config(void);
+void i2c_slave_init(void);
+void i2c_pin_config(void);
 void communication_task(void* pvParameter);
 
 
