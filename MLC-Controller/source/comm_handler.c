@@ -57,7 +57,8 @@ int i2c_slave_init()
 }
 
 void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
-{
+{QueueHandle_t communication_queue;
+QueueHandle_t slave_status_queue;
 
 	i2c_master_transfer_t masterXfer;
 	masterXfer.flags=kI2C_TransferDefaultFlag;
@@ -102,7 +103,7 @@ void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
 
 static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void *userData)
 {
-
+	_Bool g_SlaveCompletionFlag;
     switch (xfer->event)
     {
         /*  Address match event */
@@ -152,7 +153,8 @@ int i2c_master_init()
 /* Slave task*/
 
 void communication_task(void* pvParameter)
-{
+{QueueHandle_t communication_queue;
+QueueHandle_t slave_status_queue;
 	led_config_type tx_data;
 	tx_data.control_mode = 0;
 	led_config_type tx_buff;
