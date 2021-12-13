@@ -320,9 +320,6 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
-					<fileInfo id="com.crt.advproject.config.exe.debug.1736428124.396585333" name="comm_handler.c" rcbsApplicability="disable" resourcePath="source/comm_handler.c" toolsToInvoke="com.crt.advproject.gcc.exe.debug.749762415.530302155">
-						<tool id="com.crt.advproject.gcc.exe.debug.749762415.530302155" name="MCU C Compiler" superClass="com.crt.advproject.gcc.exe.debug.749762415"/>
-					</fileInfo>
 					<sourceEntries>
 						<entry flags="LOCAL|VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="CMSIS"/>
 						<entry flags="LOCAL|VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="board"/>

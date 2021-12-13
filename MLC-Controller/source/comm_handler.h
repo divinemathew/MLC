@@ -20,13 +20,10 @@
 #define I2C0_BAUDRATE               100000U
 #define I2C_DATA_LEN				35U
 
-extern xQueueHandle communication_queue;
-extern xQueueHandle slave_status_queue;
+
 
 int i2c_slave_init(void);
 int i2c_pin_config(void);
-void communication_task(void* pvParameter);
-
 
 
 #endif /* COMM_HANDLER_H_ */
