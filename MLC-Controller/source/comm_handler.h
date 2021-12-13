@@ -22,5 +22,4 @@
 
 
 
-
 #endif /* COMM_HANDLER_H_ */

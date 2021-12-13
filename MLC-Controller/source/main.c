@@ -52,10 +52,7 @@ QueueHandle_t slave_status_queue;
 /***********************************
  * Public Functions
  ***********************************/
-void dummy(void)
-{
-	PRINTF("dummy");
-}
+
 int main(void) {
 
 	/* Init board hardware. */
@@ -73,8 +70,15 @@ int main(void) {
     }
 
     /* UI_handler task creation */
-    xTaskCreate(ui_handler_task, "task1", configMINIMAL_STACK_SIZE + 100, NULL, 4, &ui_handler_handle);
    // xTaskCreate(dummy, "tasky1", configMINIMAL_STACK_SIZE + 100, NULL, 4, &u);
+
+   if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)false, communication_task_PRIORITY, NULL)!=pdPASS){
+   	PRINTF("\r\nCommunication Task Creation failed");
+   }
+
+    /* UI_handler task creation */
+    xTaskCreate(ui_handler_task, "task1", configMINIMAL_STACK_SIZE + 100, NULL, 4, &ui_handler_handle);
+
 
     /* Start scheduler */
     vTaskStartScheduler();
