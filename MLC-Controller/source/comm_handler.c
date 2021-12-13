@@ -9,7 +9,8 @@
 * @note
 *
 * Revision History:
-* - 220921  DAM : Creation Date
+* - 081221  DAM : Creation Date
+* - 091221  DAM : Initilization
 */
 
 #include "mlc_common.h"
@@ -30,7 +31,14 @@
 * Typedefs and Enum Declarations
 ***********************************/
 
-// none
+/*Slave Data Structure*/
+typedef struct {
+	uint8_t slave_status[2];
+	uint8_t slave_id[2];
+	led_config_type rx_data;
+} slave_data;
+slave_data database;
+
 
 /***********************************
 * External Variable Declarations
@@ -43,7 +51,7 @@
 ***********************************/
 extern QueueHandle_t communication_queue;
 extern QueueHandle_t slave_status_queue;
-// none
+
 
 /***********************************
 * Public Variables
@@ -78,25 +86,19 @@ void i2c_master_init(void);
 ***********************************/
 
 /**
-* @patternsearch
+* @i2c_pin_config
 * @brief 
 *
-* This function searches for the 8/16 bit pattern given by the user.
+* This function initilizes Pin for I2C0
 *
-* @param	*fptr		:	file pointer to the binary file
-* @param	pattern[]	:	pattern which the user is inputting
-* @param	pattern_len	:	length of pattern
-* @return	int	
+* @param
 *
 *
 * @note
 *
 * Revision History:
-* - 220921  DAM : Creation Date
+* - 081221  DAM : Creation Date
 */
-
-
-
 void i2c_pin_config(void)
 {
     /* Port B Clock Gate Control: Clock enabled */
@@ -119,14 +121,28 @@ void i2c_pin_config(void)
                                                     /* Pin Control Register fields [15:0] are not locked */
                                                     kPORT_UnlockRegister};
 
-    PORT_SetPinConfig(PORTE, 24U, &i2c_pin);
-    PORT_SetPinConfig(PORTE, 25U, &i2c_pin);
-
-    return true;
-
+    PORT_SetPinConfig(PORTE, 24U, &i2c_pin);	/* Pin is configured as I2C0_SCL */
+    PORT_SetPinConfig(PORTE, 25U, &i2c_pin);	 /* Pin is configured as I2C0_SDL */	
 }
 
 
+
+
+
+/**
+* @i2c_slave_init
+* @brief 
+*
+* Configure I2C as slave
+*
+* @param
+*
+*
+* @note
+*
+* Revision History:
+* - 081221  DAM : Creation Date
+*/
 void i2c_slave_init()
 {
     i2c_slave_config_t slave_config;
@@ -139,9 +155,51 @@ void i2c_slave_init()
     slave_config.sclStopHoldTime_ns = I2C0_SLAVE_HOLD_TIME_NS;
 
     I2C_SlaveInit(I2C0_BASEADDR, &slave_config, I2C0_CLK_FREQ);
-    return true;
 }
 
+
+/**
+* @i2c_master_init
+* @brief 
+*
+* Configure I2C as master
+*
+* @param
+*
+*
+* @note
+*
+* Revision History:
+* - 081221  DAM : Creation Date
+*/
+void i2c_master_init(void)
+{
+    i2c_master_config_t master_config;
+
+    I2C_MasterGetDefaultConfig(&master_config);
+    master_config.baudRate_Bps = I2C0_BAUDRATE;
+    I2C_MasterInit(I2C0_BASEADDR, &master_config, I2C0_CLK_FREQ);
+}
+
+
+
+/**
+* @i2c_write
+* @brief 
+*
+* This function is used by I2C master to check the offset address of the slave and to perform various actions like Handshaking Slave Read, Write etc
+*
+*
+* @param offset	-	Offset address of the slave
+* @param *data	-	Data pointer 
+* @param add_size -	Size of Address
+* @param data_size -Size of Data
+*
+* @note
+*
+* Revision History:
+* - 081221  DAM : Creation Date
+*/
 void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
 {
 	i2c_master_transfer_t masterXfer;
@@ -221,15 +279,25 @@ void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
 	//PRINTF("\r\n%d",((led_config_type*)data)->start_color[0]);
 }
 
-typedef struct {
-	uint8_t slave_status[2];
-	uint8_t slave_id[2];
-	led_config_type rx_data;
-} slave_data;
-slave_data database;
 
 
 
+/**
+* @i2c_slave_callback
+* @brief 
+*
+* This function is used by I2C SLAVE ISR, this function will be invocked at various events of I2C Transfer
+*
+*
+* @param base	-	Base Address of I2C
+* @param xfer	-	Handle for I2C Transfer 
+* @param userData -	Userdata
+*
+* @note
+*
+* Revision History:
+* - 081221  DAM : Creation Date
+*/
 
 static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void *userData)
 {
@@ -287,43 +355,54 @@ static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void 
     }
 }
 
-int i2c_master_init()
-{
-    i2c_master_config_t master_config;
-
-    I2C_MasterGetDefaultConfig(&master_config);
-    master_config.baudRate_Bps = I2C0_BAUDRATE;
-    I2C_MasterInit(I2C0_BASEADDR, &master_config, I2C0_CLK_FREQ);
-    return true;
-}
 
 
 
-/* Slave task*/
 
+
+
+
+/**
+* @communication_task
+* @brief 
+*
+* This is RTOS Task used for Communication between MLC master & MLC slave 
+*
+*
+* @param 
+*
+* @note
+*
+* Revision History:
+* - 081221  DAM : Creation Date
+*/
 void communication_task(void* pvParameter)
 {
-	//communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
-	led_config_type tx_data;
-	tx_data.control_mode = 0;
 	led_config_type tx_buff;
+	tx_buff.control_mode = 0;
 	i2c_pin_config();
+	
+	/*Master Mode*/
 	if(pvParameter == true){
-		i2c_master_init();
+		i2c_master_init(); /*I2C Master Initilization*/
+		
+		/*Communication Task Loop*/
 		while(1)
 		{
-			//PRINTF("Communication Task");
+			/*Checking For any item available in Queue*/
 			if(xQueueReceive(communication_queue, &tx_buff, 0)==pdPASS){
 				PRINTF("%d",tx_buff.start_color[0]);
+				
 				if(tx_buff.control_mode!=0){
 					PRINTF("\r\nEntered In conTrol Mode");
+					/*Transfer the data to MLC Slave via I2C Protocol*/
 					i2c_write(CONTROL_MODE_OFFSET, &tx_buff.control_mode, 1, 1);
 					/*Transfer the control bit (CONFIG) to PATTERN QUEUE*/
-
 				}
 				else if(tx_buff.control_mode==0){
 					/*Transfer the CONFIG to PATTERN QUEUE*/
 					PRINTF("%d",tx_buff.start_color[0]);
+					/*Transfer the control bit to MLC Slave via I2C Protocol*/
 					i2c_write(SLAVEMODE_OFFSET, &tx_buff, 1, sizeof(led_config_type));
 				}
 			}
@@ -332,11 +411,12 @@ void communication_task(void* pvParameter)
 			}
 		}
 	}
+	/*MLC Slave Mode*/
 	else if (pvParameter == false){
 		i2c_slave_handle_t slave_handle;
 	    memset(&slave_handle, 0, sizeof(slave_handle));
 		I2C_SlaveTransferCreateHandle(I2C0_BASE, &slave_handle, i2c_slave_callback, NULL);
-		i2c_slave_init();
+		i2c_slave_init(); /*Initilization of I2C Slave*/
 
 		I2C_SlaveTransferNonBlocking(I2C0_BASE, &slave_handle, kI2C_SlaveCompletionEvent | kI2C_SlaveTransmitEvent | kI2C_SlaveReceiveEvent);
 		while(true){
