@@ -1,3 +1,17 @@
+/**
+* @comm_handler.c
+* @brief 
+*
+* All Operations using I2C communication are implemented in this file.
+*
+* @para
+* 
+* @note
+*
+* Revision History:
+* - 220921  DAM : Creation Date
+*/
+
 #include "mlc_common.h"
 #include <comm_handler.h>
 #include "fsl_i2c.h"
@@ -6,12 +20,81 @@
 #include "fsl_debug_console.h"
 
 
+/*******************************************
+* Const and Macro Defines
+*******************************************/
+
+
+
+/***********************************
+* Typedefs and Enum Declarations
+***********************************/
+
+// none
+
+/***********************************
+* External Variable Declarations
+***********************************/
+
+// none
+
+/***********************************
+* Const Declarations
+***********************************/
+
+// none
+
+/***********************************
+* Public Variables
+***********************************/
 
 uint8_t slave_buff[I2C_DATA_LENGTH];
 uint8_t slave_ID[2] ={0xBE,0xEF};
 
+/***********************************
+* Private Variables
+***********************************/
 
-int i2c_pin_config(void)
+// none
+
+/***********************************
+* Private Prototypes
+***********************************/
+
+void i2c_pin_config(void);
+void i2c_slave_init(void);
+void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size);
+void i2c_master_init(void);
+
+/***********************************
+* Public Functions
+***********************************/
+
+/**
+* @patternsearch
+* @brief 
+*
+* This function searches for the 8/16 bit pattern given by the user.
+*
+* @param	*fptr		:	file pointer to the binary file
+* @param	pattern[]	:	pattern which the user is inputting
+* @param	pattern_len	:	length of pattern
+* @return	int	
+*
+*
+* @note
+*
+* Revision History:
+* - 220921  DAM : Creation Date
+*/
+
+
+
+
+
+
+
+void i2c_pin_config(void)
 {
     /* Port B Clock Gate Control: Clock enabled */
     CLOCK_EnableClock(kCLOCK_PortB);
@@ -36,12 +119,10 @@ int i2c_pin_config(void)
     PORT_SetPinConfig(PORTE, 24U, &i2c_pin);
     PORT_SetPinConfig(PORTE, 25U, &i2c_pin);
 
-    return true;
-
 }
 
 
-int i2c_slave_init()
+void i2c_slave_init(void)
 {
     i2c_slave_config_t slave_config;
     status_t status = kStatus_Success;
@@ -53,7 +134,6 @@ int i2c_slave_init()
     slave_config.sclStopHoldTime_ns = I2C0_SLAVE_HOLD_TIME_NS;
 
     I2C_SlaveInit(I2C0_BASEADDR, &slave_config, I2C0_CLK_FREQ);
-    return true;
 }
 
 void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
@@ -137,14 +217,13 @@ static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void 
     }
 }
 
-int i2c_master_init()
+void i2c_master_init(void)
 {
     i2c_master_config_t master_config;
 
     I2C_MasterGetDefaultConfig(&master_config);
     master_config.baudRate_Bps = I2C0_BAUDRATE;
     I2C_MasterInit(I2C0_BASEADDR, &master_config, I2C0_CLK_FREQ);
-    return true;
 }
 
 
