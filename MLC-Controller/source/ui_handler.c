@@ -110,11 +110,13 @@ typedef enum {
 /***********************************
  * Private Variables
  ***********************************/
+
 static QueueHandle_t communication_queue;
 static QueueHandle_t slave_status_queue;
 
 _Bool master_mode = true;
 _Bool device_connected = false;
+
 _Bool anime_frame_1 = true;
 char config_value_str[][CONFIG_VALUE_LENGTH] = {"(0, 0, 0)",
 												"(7, 7, 3)",
@@ -161,6 +163,7 @@ void clear_next(uint8_t length);
  ***********************************/
 void ui_handler_task(void* board_is_master)
 {
+
 	communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
     status_timer = xTimerCreate("AutoReload", STATUS_UPDATE_TICKS, pdTRUE, 0, update_status_periodic);
     xTimerStart(status_timer, 0);
@@ -216,6 +219,8 @@ void draw_ui(void)
 
 void update_status_periodic(TimerHandle_t xTimer)
 {
+
+	if (xQueueReceive(slave_status_queue, &device_connected, 0)) {
 	/* Redraw connection status */
 	set_cursor(STATUS_ROW + (0 * LINE_SPACE), strlen(status_name[0]) + STATUS_COL);
 	if (master_mode) {
@@ -234,6 +239,8 @@ void update_status_periodic(TimerHandle_t xTimer)
 			PRINTF("%s", status_const_str[1][0]);
 			clear_next(5);
 		}
+	}
+
 	}
 
 	/* Redraw current color */
@@ -339,9 +346,6 @@ void run_master_ui(void)
 				break;
 
 			case '\r' :
-				configuration.start_color[1] = atoi(&config_value_str[0][1]) << 5;
-				configuration.start_color[1] |= atoi(&config_value_str[0][4]) << 2;
-				configuration.start_color[1] |= atoi(&config_value_str[0][7]);
 
 	    		xQueueSend(communication_queue, &configuration, 0);
 				taskYIELD();
@@ -374,14 +378,15 @@ void change_line(void)
 			value_length = 9;
 			set_cursor(CONFIG_ROW + (cursor_line * LINE_SPACE), strlen(config_name[cursor_line]) + 1 + CONFIG_COL);
 			break;
+
 		case 2 :
 		case 4 :
 		case 5 :
 			cursor_pos = strlen(config_value_str[cursor_line]);
 			value_length = cursor_pos;
 			set_cursor(CONFIG_ROW + (cursor_line * LINE_SPACE), strlen(config_name[cursor_line]) + value_length + CONFIG_COL);
-
 			break;
+      
 		case 3 :
 			cursor_pos = strlen(config_value_str[cursor_line]) + 4;
 			value_length = cursor_pos;
@@ -493,7 +498,6 @@ void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed
 
 void set_cursor(uint16_t row, uint16_t col)
 {
-	xTimerStop(status_timer, 0);
 	char row_str[4], col_str[4];
 	itoa(row, row_str, 10);
 	itoa(col, col_str, 10);
@@ -502,7 +506,6 @@ void set_cursor(uint16_t row, uint16_t col)
 	PRINTF("%c", coordinates[3]);
 	PRINTF("%s", col_str);
 	PRINTF("%c", coordinates[5]);
-	xTimerStart(status_timer, 0);
 }
 
 void move_cursor_left(uint16_t no_of_times)

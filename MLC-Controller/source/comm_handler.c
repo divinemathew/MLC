@@ -41,7 +41,8 @@
 /***********************************
 * Const Declarations
 ***********************************/
-
+extern QueueHandle_t communication_queue;
+extern QueueHandle_t slave_status_queue;
 // none
 
 /***********************************
@@ -143,7 +144,6 @@ void i2c_slave_init()
 
 void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
 {
-
 	i2c_master_transfer_t masterXfer;
 	masterXfer.flags=kI2C_TransferDefaultFlag;
 	masterXfer.slaveAddress=SLAVE_ADDRESS;
@@ -210,8 +210,9 @@ void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
 			masterXfer.subaddressSize=1;
 			I2C_MasterTransferBlocking(I2C0, &masterXfer);
 		} else{
-			PRINTF("No Slave Found");
-			xQueueSend(slave_status_queue,false,0);
+			//PRINTF("No Slave Found");
+			_Bool status = false;
+			xQueueSend(slave_status_queue,&status,0);
 		}
 	}
 
@@ -232,6 +233,8 @@ slave_data database;
 
 static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void *userData)
 {
+
+	_Bool g_SlaveCompletionFlag;
     switch (xfer->event)
     {
         /*  Address match event */
@@ -300,20 +303,18 @@ int i2c_master_init()
 
 void communication_task(void* pvParameter)
 {
+	//communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
 	led_config_type tx_data;
 	tx_data.control_mode = 0;
 	led_config_type tx_buff;
-	tx_buff.control_mode = 10;
-	tx_buff.color_change_rate=500;
-	tx_buff.color_scheme= 40;
-	tx_buff.start_color[0]=45;
-
 	i2c_pin_config();
 	if(pvParameter == true){
 		i2c_master_init();
 		while(1)
 		{
-			if(xQueueReceive(communication_queue, &tx_buff, 0)!=pdPASS){
+			//PRINTF("Communication Task");
+			if(xQueueReceive(communication_queue, &tx_buff, 0)==pdPASS){
+				PRINTF("%d",tx_buff.start_color[0]);
 				if(tx_buff.control_mode!=0){
 					PRINTF("\r\nEntered In conTrol Mode");
 					i2c_write(CONTROL_MODE_OFFSET, &tx_buff.control_mode, 1, 1);
@@ -322,6 +323,7 @@ void communication_task(void* pvParameter)
 				}
 				else if(tx_buff.control_mode==0){
 					/*Transfer the CONFIG to PATTERN QUEUE*/
+					PRINTF("%d",tx_buff.start_color[0]);
 					i2c_write(SLAVEMODE_OFFSET, &tx_buff, 1, sizeof(led_config_type));
 				}
 			}

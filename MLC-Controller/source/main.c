@@ -40,8 +40,8 @@
  ***********************************/
 TaskHandle_t ui_handler_handle;
 
-static QueueHandle_t communication_queue;
-static QueueHandle_t slave_status_queue;
+QueueHandle_t communication_queue;
+QueueHandle_t slave_status_queue;
 
 /***********************************
  * Private Prototypes
@@ -52,6 +52,7 @@ static QueueHandle_t slave_status_queue;
 /***********************************
  * Public Functions
  ***********************************/
+
 int main(void) {
 
 	/* Init board hardware. */
@@ -62,12 +63,22 @@ int main(void) {
 
 
     communication_queue = xQueueCreate(1, sizeof (led_config_type));
-//    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)false, communication_task_PRIORITY, NULL)!=pdPASS){
-//    	PRINTF("\r\nCommunication Task Creation failed");
-//    }
+    slave_status_queue = xQueueCreate(1, sizeof (_Bool));
+
+    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)true, 5, NULL)!=pdPASS){
+    	PRINTF("\r\nCommunication Task Creation failed");
+    }
+
+    /* UI_handler task creation */
+   // xTaskCreate(dummy, "tasky1", configMINIMAL_STACK_SIZE + 100, NULL, 4, &u);
+
+   if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)false, communication_task_PRIORITY, NULL)!=pdPASS){
+   	PRINTF("\r\nCommunication Task Creation failed");
+   }
 
     /* UI_handler task creation */
     xTaskCreate(ui_handler_task, "task1", configMINIMAL_STACK_SIZE + 100, NULL, 4, &ui_handler_handle);
+
 
     /* Start scheduler */
     vTaskStartScheduler();

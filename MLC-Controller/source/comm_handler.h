@@ -22,8 +22,4 @@
 
 
 
-int i2c_slave_init(void);
-int i2c_pin_config(void);
-
-
 #endif /* COMM_HANDLER_H_ */
