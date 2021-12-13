@@ -50,6 +50,10 @@ typedef struct {
 	uint8_t current_color[3];
 } led_config_type;
 
+typedef enum {
+	COMMUNICATION_QUEUE,
+	SLAVE_STATUS_QUEUE
+} queue_enum;
 
 /***********************************
 * Const Declarations
@@ -60,13 +64,14 @@ typedef struct {
 /***********************************
 * Variable Declarations
 ***********************************/
-extern TimerHandle_t status_timer;
-extern TaskHandle_t ui_handler_handle;
+
+// none
 
 /***********************************
 * Prototypes
 ***********************************/
-void ui_handler_task(void *);
-void update_status(TimerHandle_t);
+void ui_handler_task(void* board_is_master);
+void communication_task(void* pvParameter);
+QueueHandle_t get_queue_handle(queue_enum);
 
 #endif /* MLC_COMMON_H_ */
