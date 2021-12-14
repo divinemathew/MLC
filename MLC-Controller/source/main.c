@@ -10,6 +10,7 @@
  *******************************************/
 #define communication_task_PRIORITY  (configMAX_PRIORITIES - 2)
 #define master_task_PRIORITY (configMAX_PRIORITIES - 2)
+#define JUMPER_PIN 0U
 
 /***********************************
  * Typedefs and Enum Declarations
@@ -43,6 +44,7 @@ TaskHandle_t ui_handler_handle;
 QueueHandle_t communication_queue;
 QueueHandle_t slave_status_queue;
 
+
 /***********************************
  * Private Prototypes
  ***********************************/
@@ -53,7 +55,9 @@ QueueHandle_t slave_status_queue;
  * Public Functions
  ***********************************/
 
-int main(void) {
+int main(void)
+{
+	_Bool master_mode = true;
 
 	/* Init board hardware. */
     BOARD_InitBootPins();
@@ -61,21 +65,22 @@ int main(void) {
     BOARD_InitBootPeripherals();
     BOARD_InitDebugConsole();
 
-
+    master_mode = GPIO_PinRead(GPIOD, JUMPER_PIN);
+    PRINTF("%d\n\r", master_mode);
     communication_queue = xQueueCreate(1, sizeof (led_config_type));
     slave_status_queue = xQueueCreate(1, sizeof (_Bool));
 
-    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)true, 4, NULL)!=pdPASS){
+    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, master_mode, 4, NULL)!=pdPASS){
     	PRINTF("\r\nCommunication Task Creation failed");
     }
 
 
     /* UI_handler task creation */
-    xTaskCreate(ui_handler_task, "task1", configMINIMAL_STACK_SIZE + 100, NULL, 4, &ui_handler_handle);
+    xTaskCreate(ui_handler_task, "task1", configMINIMAL_STACK_SIZE + 100, &master_mode, 4, &ui_handler_handle);
 
 
     /* Start scheduler */
-    vTaskStartScheduler();
+  //  vTaskStartScheduler();
 	for (; ;) {
 	}
     return 0 ;
