@@ -51,6 +51,12 @@ static QueueHandle_t slave_status_queue;
 
 uint8_t slave_buff[I2C_DATA_LENGTH];
 uint8_t slave_ID[2] ={0xBE,0xEF};
+_Bool g_SlaveCompletionFlag;
+uint8_t index = 0;
+uint8_t recieve_size=20;
+uint8_t * buff;
+uint8_t transmit_size = 0;
+
 
 /***********************************
 * Private Variables
@@ -91,10 +97,6 @@ void i2c_master_init(void);
 
 
 
-
-
-
-
 void i2c_pin_config(void)
 {
     /* Port B Clock Gate Control: Clock enabled */
@@ -120,10 +122,12 @@ void i2c_pin_config(void)
     PORT_SetPinConfig(PORTE, 24U, &i2c_pin);
     PORT_SetPinConfig(PORTE, 25U, &i2c_pin);
 
+    return true;
+
 }
 
 
-void i2c_slave_init(void)
+void i2c_slave_init()
 {
     i2c_slave_config_t slave_config;
     status_t status = kStatus_Success;
@@ -135,10 +139,15 @@ void i2c_slave_init(void)
     slave_config.sclStopHoldTime_ns = I2C0_SLAVE_HOLD_TIME_NS;
 
     I2C_SlaveInit(I2C0_BASEADDR, &slave_config, I2C0_CLK_FREQ);
+    return true;
 }
 
 void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
 {
+<<<<<<< HEAD
+=======
+
+>>>>>>> 3e9202682ef0958a0973b0f1ee188e5e2b7e0f70
 	i2c_master_transfer_t masterXfer;
 	masterXfer.flags=kI2C_TransferDefaultFlag;
 	masterXfer.slaveAddress=SLAVE_ADDRESS;
@@ -146,6 +155,43 @@ void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
 	masterXfer.dataSize=data_size;
 	masterXfer.subaddress=offset;
 	masterXfer.subaddressSize= add_size;
+	switch (offset) {
+		case CONTROL_MODE_OFFSET:
+			masterXfer.data = data;
+			//PRINTF("%d",masterXfer.data);
+			I2C_MasterTransferBlocking(I2C0,&masterXfer);
+			break;
+		case SLAVEMODE_OFFSET:;
+			uint8_t slave_id[2];
+			masterXfer.data=slave_id;
+			masterXfer.dataSize=2;
+			masterXfer.direction=kI2C_Read;
+			I2C_MasterTransferBlocking(I2C0, &masterXfer);
+			if(slave_id[0]==0xBE && slave_id[1]==0xEF){
+				xQueueSend(slave_status_queue,true,0);
+				PRINTF("Slave Found");
+				masterXfer.data=data;
+				masterXfer.dataSize=data_size;
+				masterXfer.direction=kI2C_Write;
+				masterXfer.subaddress=SLAVE_CONFIG_OFFSET;
+				masterXfer.subaddressSize=1;
+				I2C_MasterTransferBlocking(I2C0, &masterXfer);
+			} else{
+				PRINTF("No Slave Found");
+				xQueueSend(slave_status_queue,false,0);
+			}
+			break;
+		case SLAVE_CONFIG_OFFSET:
+			masterXfer.data=data;
+			masterXfer.dataSize=data_size;
+			masterXfer.direction=kI2C_Write;
+			masterXfer.subaddress=SLAVE_CONFIG_OFFSET;
+			masterXfer.subaddressSize=1;
+			I2C_MasterTransferBlocking(I2C0, &masterXfer);
+			break;
+		default:
+			break;
+	}
 
 	if(offset==CONTROL_MODE_OFFSET){
 		masterXfer.data = data;
@@ -179,11 +225,18 @@ void i2c_write(uint8_t offset,uint8_t *data,uint8_t add_size,uint8_t data_size)
 	//PRINTF("\r\n%d",((led_config_type*)data)->start_color[0]);
 }
 
+typedef struct {
+	uint8_t slave_status[2];
+	uint8_t slave_id[2];
+	led_config_type rx_data;
+} slave_data;
+slave_data database;
+
+
 
 
 static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void *userData)
 {
-	_Bool g_SlaveCompletionFlag;
     switch (xfer->event)
     {
         /*  Address match event */
@@ -194,22 +247,40 @@ static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void 
         /*  Transmit request */
         case kI2C_SlaveTransmitEvent:
             /*  Update information for transmit process */
-            xfer->data     = &slave_buff[2];
-            xfer->dataSize = slave_buff[1];
+            xfer->data     = buff;
+            xfer->dataSize = transmit_size;
             break;
 
         /*  Receive request */
         case kI2C_SlaveReceiveEvent:
             /*  Update information for received process */
-            xfer->data     = slave_buff;
-            xfer->dataSize = I2C_DATA_LENGTH;
-            break;
 
+            xfer->data     = g_slave_buff;
+            xfer->dataSize = recieve_size;
+
+            switch (g_slave_buff[0]) {
+				case 0x00:
+		          	buff = (uint8_t *)database.slave_status;
+		            transmit_size = 2;
+		            recieve_size = 1;
+					break;
+				case 0x03:
+	            	buff = (uint8_t *) database.slave_id;;
+	            	recieve_size = 2;
+	            	break;
+				case 0x04:
+					buff = (uint8_t*) &database.rx_data;
+					recieve_size = sizeof(led_config_type);
+				default:
+					break;
+			}
+            break;
         /*  Transfer done */
         case kI2C_SlaveCompletionEvent:
             g_SlaveCompletionFlag = true;
             xfer->data            = NULL;
             xfer->dataSize        = 0;
+            index = 0;
             break;
 
         default:
@@ -218,13 +289,14 @@ static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void 
     }
 }
 
-void i2c_master_init(void)
+int i2c_master_init()
 {
     i2c_master_config_t master_config;
 
     I2C_MasterGetDefaultConfig(&master_config);
     master_config.baudRate_Bps = I2C0_BAUDRATE;
     I2C_MasterInit(I2C0_BASEADDR, &master_config, I2C0_CLK_FREQ);
+    return true;
 }
 
 
@@ -233,8 +305,11 @@ void i2c_master_init(void)
 
 void communication_task(void* pvParameter)
 {
+<<<<<<< HEAD
 	communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
 	slave_status_queue = get_queue_handle(SLAVE_STATUS_QUEUE);
+=======
+>>>>>>> 3e9202682ef0958a0973b0f1ee188e5e2b7e0f70
 	led_config_type tx_data;
 	tx_data.control_mode = 0;
 	led_config_type tx_buff;
@@ -270,10 +345,13 @@ void communication_task(void* pvParameter)
 		i2c_slave_init();
 
 		I2C_SlaveTransferNonBlocking(I2C0_BASE, &slave_handle, kI2C_SlaveCompletionEvent | kI2C_SlaveTransmitEvent | kI2C_SlaveReceiveEvent);
-		while(1){
-
-
-		}
+		while(true){
+			while(g_SlaveCompletionFlag){
+				tx_data = database.rx_data;
+				xQueueSend(communication_queue,&tx_data,0);
+				g_SlaveCompletionFlag=false;
+			}
+	}
 	}
 }
 
