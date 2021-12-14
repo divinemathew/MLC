@@ -9,22 +9,32 @@
 /*******************************************
  * Const and Macro Defines
  *******************************************/
-#define STATUS_UPDATE_TICKS 100
+#define STATUS_UPDATE_TICKS 25
 #define MAX_INPUT_LENGTH 5
-#define CONFIG_VALUE_LENGTH 13
+#define CONFIG_VALUE_LENGTH 15
 #define LINE_SPACE 2
 
-#define CONFIG_ROW 18
+#define CONFIG_ROW 22
 #define CONFIG_COL 5
 #define CONFIG_ROW_COL (CONFIG_ROW, CONFIG_COL)
-#define STATUS_ROW 10
+#define STATUS_ROW 12
 #define STATUS_COL 5
 #define STATUS_ROW_COL (STATUS_ROW, STATUS_COL)
 #define HEAD_1_ROW_COL (3, 30)
 #define HEAD_2_ROW_COL (4, 30)
+#define ERROR_ROW_COL (36, 5)
+
+#define MIN_STEP_VALUE 1
+#define MAX_STEP_VALUE 100
+#define MIN_NO_OF_CYCLES 1
+#define MAX_NO_OF_CYCLES 100
+#define MIN_CHANGE_RATE 1
+#define MAX_CHANGE_RATE 100
+#define MIN_REFRESH_RATE 1
+#define MAX_REFRESH_RATE 100
 
 #define MAX_UP 0
-#define MAX_DOWN 5
+#define MAX_DOWN 6
 #define MODE_LINE 3
 #define STATUS_COUNT 3
 #define BACKSPACE 0x08
@@ -61,25 +71,26 @@ const char status_const_str[][2][25] = {{"Slave not connected", "Slave Connected
 const char config_name[][20] = {"1. Start Color:  ",
 						   	   	"2. End Color:    ",
 								"3. Step Value:   ",
-								"4. Step Mode:    ",
-								"5. Change Rate:  ",
-								"6. Refresh Rate: "
+								"5. Step Mode:   ",
+								"4. No. of cycles ",
+								"6. Change Rate:  ",
+								"7. Refresh Rate: "
 						 	    };
 
-const char step_mode_name[][CONFIG_VALUE_LENGTH] = {"Auto Up",
-													"Auto Down",
-													"Auto Up-Down",
-													"Manual"
+const char step_mode_name[][CONFIG_VALUE_LENGTH] = {"1.Auto Up",
+													"2.Auto Down",
+													"3.Auto Up-Down",
+													"4.Manual"
 													};
 
 /***********************************
  * Typedefs and Enum Declarations
  ***********************************/
 typedef enum {
-	AUTO_UP,
-	AUTO_DOWN,
-	AUTO_UP_DOWN,
-	MANUAL
+	AUTO_UP = 0,
+	AUTO_DOWN = 1,
+	AUTO_UP_DOWN = 2,
+	MANUAL = 3
 } step_mode_enum;
 
 typedef enum {
@@ -89,6 +100,19 @@ typedef enum {
 	LEFT,
 	RIGHT
 } arrow_key_type;
+
+typedef enum {
+	START_COLOR = 0,
+	STOP_COLOR = 1,
+	STEP_VALUE = 2,
+	STEP_MODE = 3,
+	NO_OF_CYCLES = 4,
+	COLOR_CHANGE_RATE = 5,
+	REFRESH_RATE = 6,
+	COLOR_SCHEME = 7,
+	CONTROL_MODE = 8
+} config_name_enum;
+
 /***********************************
  * External Variable Declarations
  ***********************************/
@@ -114,15 +138,17 @@ static QueueHandle_t communication_queue;
 static QueueHandle_t slave_status_queue;
 
 _Bool master_mode = true;
-_Bool device_connected = false;
+_Bool device_connected = true;
 _Bool anime_frame_1 = true;
 char config_value_str[][CONFIG_VALUE_LENGTH] = {"(0, 0, 0)",
 												"(7, 7, 3)",
 												"1",
-												"Auto_Up",
+												"1.Auto_Up",
+												"1",
 												"1",
 												"1"};
 int number[5];
+step_mode_enum step_mode = AUTO_UP;
 uint8_t cursor_line = 0;
 uint8_t cursor_pos;
 uint8_t value_length;
@@ -155,6 +181,8 @@ void draw_dotted_square(uint16_t length, uint16_t breadth);
 void draw_square(uint16_t length, uint16_t breadth);
 void move_cursor_left(uint16_t no_of_times);
 void clear_next(uint8_t length);
+uint8_t parse_color(char* color_str);
+void validate_and_send(void);
 
 /***********************************
  * Public Functions
@@ -162,7 +190,8 @@ void clear_next(uint8_t length);
 void ui_handler_task(void* board_is_master)
 {
 	communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
-    status_timer = xTimerCreate("AutoReload", STATUS_UPDATE_TICKS, pdTRUE, 0, update_status_periodic);
+	slave_status_queue = get_queue_handle(SLAVE_STATUS_QUEUE);
+    status_timer = xTimerCreate("Status_timer", STATUS_UPDATE_TICKS, pdTRUE, 0, update_status_periodic);
     xTimerStart(status_timer, 0);
 
     /* Clear screen and print UI */
@@ -193,13 +222,21 @@ void draw_ui(void)
     }
 
 	/* Draw status */
+    set_cursor(STATUS_ROW - (LINE_SPACE + 1), STATUS_COL - 1);
+    draw_dotted_square(21, 1);
+    PRINTF("       %s", status_title);
 	for (uint16_t line = 0; line < STATUS_COUNT; line++) {
 		set_cursor(STATUS_ROW + (line * LINE_SPACE), STATUS_COL);
 		PRINTF("%s", status_name[line]);
 		PRINTF("%s", clear_end);
 	}
+	set_cursor(STATUS_ROW + (0 * LINE_SPACE), strlen(status_name[0]) + STATUS_COL);
+	PRINTF("%s", "Waiting...");
 
 	/* Draw configuration table */
+	set_cursor(CONFIG_ROW - (LINE_SPACE + 1), CONFIG_COL - 1);
+	    draw_dotted_square(20, 1);
+	    PRINTF("    %s", config_title);
 	for (uint16_t line = 0; line <= MAX_DOWN; line++) {
 		set_cursor(CONFIG_ROW + (line * LINE_SPACE), CONFIG_COL);
 		PRINTF("%s", config_name[line]);
@@ -208,7 +245,7 @@ void draw_ui(void)
 		}
 		PRINTF("%s", clear_end);
 	}
-	set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[cursor_line]) + CONFIG_COL + 2);
+	set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[cursor_line]) + CONFIG_COL + 1);
 	PRINTF("%s", config_value_str[MODE_LINE]);
 
 	/* Draw hind */
@@ -216,23 +253,27 @@ void draw_ui(void)
 
 void update_status_periodic(TimerHandle_t xTimer)
 {
+	int16_t row, col;
+
 	/* Redraw connection status */
-	set_cursor(STATUS_ROW + (0 * LINE_SPACE), strlen(status_name[0]) + STATUS_COL);
-	if (master_mode) {
-		if (device_connected) {
-			PRINTF("%s", status_const_str[0][1]);
-			clear_next(5);
+	if (xQueueReceive(slave_status_queue, &device_connected, 0)) {
+		set_cursor(STATUS_ROW + (0 * LINE_SPACE), strlen(status_name[0]) + STATUS_COL);
+		if (master_mode) {
+			if (device_connected) {
+				PRINTF("%s", status_const_str[0][1]);
+				clear_next(5);
+			} else {
+				PRINTF("%s", status_const_str[0][0]);
+				clear_next(5);
+			}
 		} else {
-			PRINTF("%s", status_const_str[0][0]);
-			clear_next(5);
-		}
-	} else {
-		if (device_connected) {
-			PRINTF("%s", status_const_str[1][1]);
-			clear_next(5);
-		} else {
-			PRINTF("%s", status_const_str[1][0]);
-			clear_next(5);
+			if (device_connected) {
+				PRINTF("%s", status_const_str[1][1]);
+				clear_next(5);
+			} else {
+				PRINTF("%s", status_const_str[1][0]);
+				clear_next(5);
+			}
 		}
 	}
 
@@ -242,27 +283,49 @@ void update_status_periodic(TimerHandle_t xTimer)
 
 	/* Redraw pattern position */
 	set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
-	PRINTF("%s", "[##########          ]");
+	PRINTF("%s", "[#####     ]");
 
 	/* Next frame of animation */
-	set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[cursor_line]) + CONFIG_COL);
+	set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[MODE_LINE]) + CONFIG_COL);
 	if (anime_frame_1) {
-		PRINTF("< ");
-		set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[cursor_line]) + strlen(step_mode_name[0]) + CONFIG_COL + 2);
-		PRINTF(" >");
+		if (step_mode > AUTO_UP) {
+			PRINTF("< ");
+		} else {
+			PRINTF("  ");
+		}
+		row = CONFIG_ROW + (MODE_LINE * LINE_SPACE);
+		col = strlen(config_name[MODE_LINE]) + strlen(step_mode_name[step_mode]) + CONFIG_COL + 2;
+		set_cursor(row, col);
+		if (step_mode < MANUAL) {
+			PRINTF(" >");
+		} else {
+			PRINTF("  ");
+		}
 		anime_frame_1 = false;
 	} else {
-		PRINTF(" <");
-		set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[cursor_line]) + strlen(step_mode_name[0]) + CONFIG_COL + 2);
-		PRINTF("> ");
+		if (step_mode > AUTO_UP) {
+			PRINTF(" <");
+		} else {
+			PRINTF("  ");
+		}
+		row = CONFIG_ROW + (MODE_LINE * LINE_SPACE);
+		col = strlen(config_name[MODE_LINE]) + strlen(step_mode_name[step_mode]) + CONFIG_COL + 2;
+		set_cursor(row, col);
+		if (step_mode < MANUAL) {
+			PRINTF("> ");
+		} else {
+			PRINTF("  ");
+		}
 		anime_frame_1 = true;
 	}
 
 	/* Reset cursor */
 	if (master_mode) {
-		set_cursor(CONFIG_ROW + (cursor_line * LINE_SPACE), strlen(config_name[cursor_line]) + cursor_pos + CONFIG_COL);
+		row = CONFIG_ROW + (cursor_line * LINE_SPACE);
+		col = strlen(config_name[cursor_line]) + cursor_pos + CONFIG_COL;
+		set_cursor(row, col);
 	} else {
-		set_cursor(100, 1);
+		set_cursor(1, 1);
 	}
 }
 
@@ -339,11 +402,7 @@ void run_master_ui(void)
 				break;
 
 			case '\r' :
-				configuration.start_color[1] = atoi(&config_value_str[0][1]) << 5;
-				configuration.start_color[1] |= atoi(&config_value_str[0][4]) << 2;
-				configuration.start_color[1] |= atoi(&config_value_str[0][7]);
-
-	    		xQueueSend(communication_queue, &configuration, 0);
+				validate_and_send();
 				taskYIELD();
 				break;
 
@@ -353,6 +412,51 @@ void run_master_ui(void)
 	}
 }
 
+void validate_and_send(void)
+{
+	_Bool config_valid = true;
+
+	configuration.start_color[0] = parse_color(config_value_str[START_COLOR]);
+	configuration.stop_color[0] = parse_color(config_value_str[STOP_COLOR]);
+	configuration.step_value = atoi(config_value_str[STEP_VALUE]);
+	configuration.step_mode = (uint8_t)step_mode;
+	configuration.no_of_cycles = atoi(config_value_str[NO_OF_CYCLES]);
+	configuration.color_change_rate = atoi(config_value_str[COLOR_CHANGE_RATE]);
+	configuration.refresh_rate = atoi(config_value_str[REFRESH_RATE]);
+
+	config_valid &= config_value_str[START_COLOR][1] >= '0';
+	config_valid &= config_value_str[START_COLOR][4] >= '0';
+	config_valid &= config_value_str[START_COLOR][7] >= '0';
+	config_valid &= config_value_str[STOP_COLOR][1] >= '0';
+	config_valid &= config_value_str[STOP_COLOR][4] >= '0';
+	config_valid &= config_value_str[STOP_COLOR][7] >= '0';
+
+	config_valid &= config_value_str[START_COLOR][1] <= '7';
+	config_valid &= config_value_str[START_COLOR][4] <= '7';
+	config_valid &= config_value_str[START_COLOR][7] <= '3';
+	config_valid &= config_value_str[STOP_COLOR][1] <= '7';
+	config_valid &= config_value_str[STOP_COLOR][4] <= '7';
+	config_valid &= config_value_str[STOP_COLOR][7] <= '3';
+
+	config_valid &= configuration.step_value >= MIN_STEP_VALUE;
+	config_valid &= configuration.no_of_cycles >= MIN_NO_OF_CYCLES;
+	config_valid &= configuration.color_change_rate >= MIN_CHANGE_RATE;
+	config_valid &= configuration.refresh_rate >= MIN_CHANGE_RATE;
+
+	config_valid &= configuration.step_value <= MAX_STEP_VALUE;
+	config_valid &= configuration.no_of_cycles <= MAX_NO_OF_CYCLES;
+	config_valid &= configuration.color_change_rate <= MAX_CHANGE_RATE;
+	config_valid &= configuration.refresh_rate <= MAX_CHANGE_RATE;
+
+	if (config_valid) {
+		xQueueSend(communication_queue, &configuration, 0);
+		set_cursor ERROR_ROW_COL;
+		PRINTF("%s", clear_end);
+	} else {
+		set_cursor ERROR_ROW_COL;
+		PRINTF("Invalid Configuration");
+	}
+}
 
 void run_slave_ui(void)
 {
@@ -368,22 +472,28 @@ void update_config_screen(void)
 void change_line(void)
 {
 	switch (cursor_line) {
-		case 0 :
-		case 1 :
+
+		/* color data type */
+		case START_COLOR :
+		case STOP_COLOR :
 			cursor_pos = 1;
 			value_length = 9;
 			set_cursor(CONFIG_ROW + (cursor_line * LINE_SPACE), strlen(config_name[cursor_line]) + 1 + CONFIG_COL);
 			break;
-		case 2 :
-		case 4 :
-		case 5 :
+
+		/* number data type */
+		case STEP_VALUE:
+		case NO_OF_CYCLES :
+		case COLOR_CHANGE_RATE :
+		case REFRESH_RATE :
 			cursor_pos = strlen(config_value_str[cursor_line]);
 			value_length = cursor_pos;
 			set_cursor(CONFIG_ROW + (cursor_line * LINE_SPACE), strlen(config_name[cursor_line]) + value_length + CONFIG_COL);
-
 			break;
-		case 3 :
-			cursor_pos = strlen(config_value_str[cursor_line]) + 4;
+
+		/* change mode type input */
+		case STEP_MODE :
+			cursor_pos = strlen(step_mode_name[step_mode]) + 4;
 			value_length = cursor_pos;
 			set_cursor(CONFIG_ROW + (cursor_line * LINE_SPACE), strlen(config_name[cursor_line]) + value_length + CONFIG_COL);
 	}
@@ -392,38 +502,36 @@ void change_line(void)
 void process_ui_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (cursor_line) {
-		case 0 :
-		case 1 :
+		case START_COLOR :
+		case STOP_COLOR :
 			read_color_input(str, key_pressed, arrow_pressed);
 			break;
 
-		case 2 :
-		case 4 :
-		case 5 :
+		case STEP_VALUE:
+		case NO_OF_CYCLES :
+		case COLOR_CHANGE_RATE :
+		case REFRESH_RATE :
 			read_number_input(str, key_pressed, arrow_pressed);
 			break;
 
-		case 3 :
+		case STEP_MODE :
 			read_mode_input(str, key_pressed, arrow_pressed);
 	}
 }
+
 void read_color_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (arrow_pressed) {
 		case LEFT :
-			if (key_pressed == 'D' && cursor_pos > 1) {
-				PRINTF("%s", left);
-				PRINTF("%s", left);
-				PRINTF("%s", left);
+			if (cursor_pos > 1) {
+				PRINTF("%s%s%s", left, left, left);
 				cursor_pos -= 3;
 			}
 			break;
 
 		case RIGHT :
 			if (cursor_pos < (value_length - 2)) {
-				PRINTF("%s", right);
-				PRINTF("%s", right);
-				PRINTF("%s", right);
+				PRINTF("%s%s%s", right, right, right);
 				cursor_pos += 3;
 			}
 			break;
@@ -437,19 +545,42 @@ void read_color_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 			insert(str, cursor_pos, key_pressed);
 			PRINTF("%s", str + cursor_pos);
 			move_cursor_left(value_length - cursor_pos);
+		read_color_input(str, '\0', RIGHT);
 	}
 }
 
 void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
+	switch (arrow_pressed) {
+		case LEFT :
+			if (step_mode > AUTO_UP) {
+				step_mode--;
+				set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[cursor_line]) + CONFIG_COL + 2);
+				PRINTF("%s", step_mode_name[step_mode]);
+				clear_next(8);
+				change_line();
+			}
+			break;
 
+		case RIGHT :
+			if (step_mode < MANUAL) {
+				step_mode++;
+				set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[cursor_line]) + CONFIG_COL + 2);
+				PRINTF("%s", step_mode_name[step_mode]);
+				clear_next(8);
+				change_line();
+			}
+			break;
+
+		default :;
+	}
 }
 
 void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (arrow_pressed) {
 		case LEFT :
-			if (key_pressed == 'D' && cursor_pos > 0) {
+			if (cursor_pos > 0) {
 				PRINTF("%s", left);
 				cursor_pos--;
 			}
@@ -493,7 +624,6 @@ void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed
 
 void set_cursor(uint16_t row, uint16_t col)
 {
-	xTimerStop(status_timer, 0);
 	char row_str[4], col_str[4];
 	itoa(row, row_str, 10);
 	itoa(col, col_str, 10);
@@ -502,7 +632,6 @@ void set_cursor(uint16_t row, uint16_t col)
 	PRINTF("%c", coordinates[3]);
 	PRINTF("%s", col_str);
 	PRINTF("%c", coordinates[5]);
-	xTimerStart(status_timer, 0);
 }
 
 void move_cursor_left(uint16_t no_of_times)
@@ -600,4 +729,22 @@ void clear_next(uint8_t length)
 		PRINTF(" ");
 	}
 	move_cursor_left(length);
+}
+
+uint8_t parse_color(char* color_str)
+{
+	uint8_t result = 0;
+	char blue[2], green[2], red[2];
+
+	blue[0] = color_str[7];
+	blue[1] = '\0';
+	green[0] = color_str[4];
+	green[1] = '\0';
+	red[0] = color_str[1];
+	red[1] = '\0';
+
+	result |= atoi(blue) & 0x03;
+	result |= (atoi(green) & 0x07) << 2;
+	result |= (atoi(red) & 0x07) << 5;
+	return result;
 }

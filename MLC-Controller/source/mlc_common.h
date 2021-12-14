@@ -47,7 +47,6 @@ typedef struct {
 	uint16_t refresh_rate;
 	uint8_t color_scheme;
 	uint8_t control_mode;
-	uint8_t current_color[3];
 } led_config_type;
 
 typedef enum {

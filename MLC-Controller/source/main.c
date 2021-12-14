@@ -62,9 +62,11 @@ int main(void) {
 
 
     communication_queue = xQueueCreate(1, sizeof (led_config_type));
-//    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)false, communication_task_PRIORITY, NULL)!=pdPASS){
-//    	PRINTF("\r\nCommunication Task Creation failed");
-//    }
+    slave_status_queue = xQueueCreate(1, sizeof (_Bool));
+
+    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)true, 4, NULL)!=pdPASS){
+    	PRINTF("\r\nCommunication Task Creation failed");
+    }
 
     /* UI_handler task creation */
     xTaskCreate(ui_handler_task, "task1", configMINIMAL_STACK_SIZE + 100, NULL, 4, &ui_handler_handle);
