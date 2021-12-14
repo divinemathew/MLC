@@ -10,7 +10,7 @@
 *
 * Revision History:
 * - 081221  DAM : Creation Date
-* - 091221  DAM : Initilization
+* - 091221  DAM : Initialization
 */
 
 #include "mlc_common.h"
@@ -60,6 +60,10 @@ extern QueueHandle_t slave_status_queue;
 uint8_t slave_buff[I2C_DATA_LENGTH];
 uint8_t slave_ID[2] ={0xBE,0xEF};
 _Bool g_SlaveCompletionFlag;
+_Bool config_receiveflag = false;
+_Bool command_receiveflag = false;
+_Bool master_readflag = false;
+_Bool master_writeflag = false;
 uint8_t index = 0;
 uint8_t recieve_size=20;
 uint8_t * buff;
@@ -321,21 +325,26 @@ static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void 
         case kI2C_SlaveReceiveEvent:
             /*  Update information for received process */
 
-            xfer->data     = g_slave_buff;
+            xfer->data     = slave_buff;
             xfer->dataSize = recieve_size;
 
-            switch (g_slave_buff[0]) {
+            switch (slave_buff[0]) {
 				case 0x00:
+					master_readflag = true;
 		          	buff = (uint8_t *)database.slave_status;
 		            transmit_size = 2;
 		            recieve_size = 1;
 					break;
-				case 0x03:
+				case 0x02:
+					master_writeflag = true;
 	            	buff = (uint8_t *) database.slave_id;;
 	            	recieve_size = 2;
 	            	break;
 				case 0x04:
 					buff = (uint8_t*) &database.rx_data;
+					recieve_size = sizeof(led_config_type);
+				case 0x11:
+					buff = (uint8_t*) &database.rx_data.control_mode;
 					recieve_size = sizeof(led_config_type);
 				default:
 					break;
@@ -378,8 +387,8 @@ static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void 
 */
 void communication_task(void* pvParameter)
 {
-	led_config_type tx_buff;
-	tx_buff.control_mode = 0;
+	led_config_type tx_data;
+	tx_data.control_mode = 0;
 	i2c_pin_config();
 	
 	/*Master Mode*/
@@ -390,20 +399,20 @@ void communication_task(void* pvParameter)
 		while(1)
 		{
 			/*Checking For any item available in Queue*/
-			if(xQueueReceive(communication_queue, &tx_buff, 0)==pdPASS){
-				PRINTF("%d",tx_buff.start_color[0]);
+			if(xQueueReceive(communication_queue, &tx_data, 0)==pdPASS){
+				PRINTF("%d",tx_data.start_color[0]);
 				
-				if(tx_buff.control_mode!=0){
+				if(tx_data.control_mode!=0){
 					PRINTF("\r\nEntered In conTrol Mode");
 					/*Transfer the data to MLC Slave via I2C Protocol*/
-					i2c_write(CONTROL_MODE_OFFSET, &tx_buff.control_mode, 1, 1);
+					i2c_write(CONTROL_MODE_OFFSET, &tx_data.control_mode, 1, 1);
 					/*Transfer the control bit (CONFIG) to PATTERN QUEUE*/
 				}
-				else if(tx_buff.control_mode==0){
+				else if(tx_data.control_mode==0){
 					/*Transfer the CONFIG to PATTERN QUEUE*/
-					PRINTF("%d",tx_buff.start_color[0]);
+					PRINTF("%d",tx_data.start_color[0]);
 					/*Transfer the control bit to MLC Slave via I2C Protocol*/
-					i2c_write(SLAVEMODE_OFFSET, &tx_buff, 1, sizeof(led_config_type));
+					i2c_write(SLAVEMODE_OFFSET, &tx_data, 1, sizeof(led_config_type));
 				}
 			}
 			else {
