@@ -416,7 +416,6 @@ void validate_and_send(void)
 {
 	_Bool config_valid = true;
 
-	/* parse structure data from string */
 	configuration.start_color[0] = parse_color(config_value_str[START_COLOR]);
 	configuration.stop_color[0] = parse_color(config_value_str[STOP_COLOR]);
 	configuration.step_value = atoi(config_value_str[STEP_VALUE]);
@@ -425,7 +424,6 @@ void validate_and_send(void)
 	configuration.color_change_rate = atoi(config_value_str[COLOR_CHANGE_RATE]);
 	configuration.refresh_rate = atoi(config_value_str[REFRESH_RATE]);
 
-	/* check if color is greater than minimum value */
 	config_valid &= config_value_str[START_COLOR][1] >= '0';
 	config_valid &= config_value_str[START_COLOR][4] >= '0';
 	config_valid &= config_value_str[START_COLOR][7] >= '0';
@@ -433,7 +431,6 @@ void validate_and_send(void)
 	config_valid &= config_value_str[STOP_COLOR][4] >= '0';
 	config_valid &= config_value_str[STOP_COLOR][7] >= '0';
 
-	/* check if color is less than maximum value */
 	config_valid &= config_value_str[START_COLOR][1] <= '7';
 	config_valid &= config_value_str[START_COLOR][4] <= '7';
 	config_valid &= config_value_str[START_COLOR][7] <= '3';
