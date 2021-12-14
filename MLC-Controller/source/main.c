@@ -40,8 +40,8 @@
  ***********************************/
 TaskHandle_t ui_handler_handle;
 
-static QueueHandle_t communication_queue;
-static QueueHandle_t slave_status_queue;
+QueueHandle_t communication_queue;
+QueueHandle_t slave_status_queue;
 
 /***********************************
  * Private Prototypes
@@ -52,6 +52,7 @@ static QueueHandle_t slave_status_queue;
 /***********************************
  * Public Functions
  ***********************************/
+
 int main(void) {
 
 	/* Init board hardware. */
@@ -68,8 +69,10 @@ int main(void) {
     	PRINTF("\r\nCommunication Task Creation failed");
     }
 
+
     /* UI_handler task creation */
     xTaskCreate(ui_handler_task, "task1", configMINIMAL_STACK_SIZE + 100, NULL, 4, &ui_handler_handle);
+
 
     /* Start scheduler */
     vTaskStartScheduler();
