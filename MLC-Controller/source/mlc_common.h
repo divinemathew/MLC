@@ -51,9 +51,38 @@ typedef struct {
 
 typedef enum {
 	COMMUNICATION_QUEUE,
-	SLAVE_STATUS_QUEUE
+	DEVICE_STATUS_QUEUE,
+	PATTERN_STATUS_QUEUE
 } queue_enum;
 
+typedef enum {
+	AUTO_UP,
+	AUTO_DOWN,
+	AUTO_UP_DOWN,
+	MANUAL
+} step_mode_enum;
+
+typedef enum {
+	START_COLOR,
+	STOP_COLOR,
+	STEP_VALUE,
+	STEP_MODE,
+	NUMBER_OF_CYCLES,
+	COLOR_CHANGE_RATE,
+	REFRESH_RATE,
+	COLOR_SCHEME,
+	CONTROL_MODE
+} config_name_enum;
+
+typedef enum {
+	NOP,
+	START,
+	STOP,
+	PAUSE,
+	RESUME,
+	UP,
+	DOWN
+} control_mode_enum;
 /***********************************
 * Const Declarations
 ***********************************/
