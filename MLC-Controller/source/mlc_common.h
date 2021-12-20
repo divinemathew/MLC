@@ -49,13 +49,25 @@ typedef struct {
 	uint8_t control_mode;
 } led_config_type;
 
+typedef enum{
+	CONTINOUS,
+	FIXED
+} no_of_cycles_enum;
+
+typedef enum{
+	EIGHT_BIT_TRUE_COLOR,
+	TWENTY_FOUR_BIT_RGB_SCHEME
+} color_scheme_enum;
+
 typedef enum {
 	COMMUNICATION_QUEUE,
 	DEVICE_STATUS_QUEUE,
-	PATTERN_STATUS_QUEUE
+	PATTERN_STATUS_QUEUE,
+	PATTERN_CONTROL_QUEUE
 } queue_enum;
 
 typedef enum {
+	DEFAULT,
 	AUTO_UP,
 	AUTO_DOWN,
 	AUTO_UP_DOWN,
@@ -100,6 +112,7 @@ typedef enum {
 ***********************************/
 void ui_handler_task(void* board_is_master);
 void communication_task(void* pvParameter);
+void pattern_executor_task(void *);
 QueueHandle_t get_queue_handle(queue_enum);
 
 #endif /* MLC_COMMON_H_ */

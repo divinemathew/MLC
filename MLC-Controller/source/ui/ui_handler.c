@@ -3,9 +3,9 @@
  * @brief   Application entry point.
  */
 
-#include "mlc_ui_drivers.h"
-#include "mlc_common.h"
+#include "mlc_ui_lib.h"
 #include <string.h>
+#include "semphr.h"
 
 /*******************************************
  * Const and Macro Defines
@@ -19,8 +19,7 @@
 /***********************************
  * External Variable Declarations
  ***********************************/
-
-// none
+extern TaskHandle_t ui_handler_handle;
 
 /***********************************
  * Const Declarations
@@ -37,6 +36,7 @@
 /***********************************
  * Private Variables
  ***********************************/
+static SemaphoreHandle_t console;
 static QueueHandle_t communication_queue;
 static QueueHandle_t device_status_queue;
 static QueueHandle_t pattern_status_queue;
@@ -60,13 +60,11 @@ static uint8_t cursor_pos;
 static uint8_t value_length;
 
 static led_config_type configuration;
-static TimerHandle_t status_timer;
 
 /***********************************
  * Private Prototypes
  ***********************************/
-void insert(char* str, uint16_t position, char input);
-void delete(char* str, uint16_t position);
+
 
 void process_ui_input(char* str, char key_pressed, arrow_key_type arrow_pressed);
 void read_color_input(char* str, char key_pressed, arrow_key_type arrow_pressed);
@@ -74,22 +72,18 @@ void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed
 void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed);
 
 void change_line(void);
-void set_cursor(uint16_t row, uint16_t col);
 void run_master_ui(void);
 void run_slave_ui(void);
-void update_config_screen(void);
+void print_config_values(void);
 void draw_ui(void);
-void update_status_periodic(TimerHandle_t xTimer);
-void draw_dotted_square(uint16_t length, uint16_t breadth);
-void draw_square(uint16_t length, uint16_t breadth);
-void move_cursor_left(uint16_t no_of_times);
-void clear_next(uint8_t length);
+void update_status_periodic(void* pvParameter);
 uint8_t parse_color(char* color_str);
 void color_to_str(uint8_t color, char* str_out);
 void print_pattern_state(uint8_t control);
 _Bool config_is_valid(void);
 void print_connection_status(void);
 void reset_cursor(void);
+
 
 /***********************************
  * Public Functions
@@ -100,8 +94,11 @@ void ui_handler_task(void* board_is_master)
 	communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
 	device_status_queue = get_queue_handle(DEVICE_STATUS_QUEUE);
 	pattern_status_queue = get_queue_handle(PATTERN_STATUS_QUEUE);
-    status_timer = xTimerCreate("Status_timer", STATUS_UPDATE_TICKS, pdTRUE, 0, update_status_periodic);
-    xTimerStart(status_timer, 0);
+	console = xSemaphoreCreateBinary();
+	xSemaphoreGive(console);
+    xTaskCreate(update_status_periodic, "UTask", configMINIMAL_STACK_SIZE + 100, NULL, 4, NULL);
+
+
     master_mode = *((_Bool*)board_is_master);
     configuration.start_color[0] = parse_color(config_value_str[START_COLOR]);
 	configuration.stop_color[0] = parse_color(config_value_str[STOP_COLOR]);
@@ -121,6 +118,18 @@ void ui_handler_task(void* board_is_master)
 	}
 }
 
+/**
+* @brief Lists all the customer details.
+*
+* Lists all members of customer type data in the file.
+*
+* @param The pointer to file containing customer type
+*
+* @note
+*
+* Revision History:
+* - 270921 ATG: Creation Date
+*/
 void draw_ui(void)
 {
 	/* Draw title */
@@ -165,7 +174,7 @@ void draw_ui(void)
 	set_cursor(CONFIG_ROW - (LINE_SPACE + 2), CONFIG_COL - 1);
 	draw_dotted_square(SMALL_SQUARE_SIZE, 1);
 	PRINTF("    %s", config_title);
-	update_config_screen();
+	print_config_values();
 
 	/* Draw hind */
 	if (master_mode) {
@@ -188,9 +197,10 @@ void draw_ui(void)
 	PRINTF("%s", show_cursor);
 }
 
-void update_status_periodic(TimerHandle_t xTimer)
-{
-	uint8_t current_color;
+void update_status_periodic(void* pvParameter)
+{while(1){
+	xSemaphoreTake(console, 100);
+	uint8_t current_color = 0;
 	int16_t row, col;
 
 	print_connection_status();
@@ -204,7 +214,7 @@ void update_status_periodic(TimerHandle_t xTimer)
 
 		/* Redraw pattern position */
 		set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
-		PRINTF("%s", "[#####     ]");
+		PRINTF("%s", "[##################   ]");
 	}
 
 	/* Next frame of animation */
@@ -242,6 +252,9 @@ void update_status_periodic(TimerHandle_t xTimer)
 	}
 
 	reset_cursor();
+	xSemaphoreGive(console);
+	vTaskDelay(100);
+}
 }
 
 void reset_cursor(void)
@@ -260,12 +273,16 @@ void run_master_ui(void)
 {
 	char key_pressed;
 	_Bool pattern_paused = false;
+	_Bool pattern_running = false;
 
 	/* print master home screen */
+	xSemaphoreTake(console, 0);
 	draw_ui();
 	change_line();
 	for ( ; ; ) {
+		xSemaphoreGive(console);
 		key_pressed = GETCHAR();
+		xSemaphoreTake(console, 100);
 		switch (key_pressed) {
 
 			/* if read an escape sequence, check which escape sequence is recieved */
@@ -303,15 +320,16 @@ void run_master_ui(void)
 				}
 				xQueueSend(communication_queue, &configuration, 0);
 				print_pattern_state(configuration.control_mode);
+				pattern_running = false;
 				break;
 
 			case 'p' :
 			case 'P' :
 				/* send toggled PAUSE/RESUME command */
-				if (pattern_paused) {
+				if (pattern_paused && pattern_running) {
 					configuration.control_mode = RESUME;
 					pattern_paused = false;
-				} else {
+				} else if (pattern_running){
 					configuration.control_mode = PAUSE;
 					pattern_paused = true;
 				}
@@ -335,12 +353,31 @@ void run_master_ui(void)
 					while (uxQueueMessagesWaiting(communication_queue) > 1) {
 					}
 					xQueueSend(communication_queue, &configuration, 0);
+					pattern_running = true;
 					print_pattern_state(configuration.control_mode);
 					taskYIELD();
 				} else {
 					set_cursor PATTERN_STATE_ROW_COL;
 					PRINTF("%s", pattern_state_const[4]);
 				}
+				break;
+
+			case 'A' :
+			case 'a' :
+				/* send DOWN command */
+				configuration.control_mode = DOWN;
+				while (uxQueueMessagesWaiting(communication_queue) > 0) {
+				}
+				xQueueSend(communication_queue, &configuration, 0);
+				break;
+
+			case 'D' :
+			case 'd' :
+				/* send DOWN command */
+				configuration.control_mode = UP;
+				while (uxQueueMessagesWaiting(communication_queue) > 0) {
+				}
+				xQueueSend(communication_queue, &configuration, 0);
 				break;
 
 			default :
@@ -395,7 +432,9 @@ _Bool config_is_valid(void)
 
 void run_slave_ui(void)
 {
+	xSemaphoreTake(console, 100);
 	draw_ui();
+	xSemaphoreGive(console);
 	for (; ;) {
 		if (xQueueReceive(communication_queue, &configuration, 0)) {
 			if (configuration.control_mode == NOP) {
@@ -412,11 +451,15 @@ void run_slave_ui(void)
 				itoa(configuration.no_of_cycles, config_value_str[NUMBER_OF_CYCLES], 10);
 				itoa(configuration.color_change_rate, config_value_str[COLOR_CHANGE_RATE], 10);
 				itoa(configuration.refresh_rate, config_value_str[REFRESH_RATE], 10);
-				update_config_screen();
+				xSemaphoreTake(console, 100);
+				print_config_values();
+				xSemaphoreGive(console);
 			} else {
 
 				/* display control received */
+				xSemaphoreTake(console, 100);
 				print_pattern_state(configuration.control_mode);
+				xSemaphoreGive(console);
 			}
 		} else {
 			taskYIELD();
@@ -427,7 +470,6 @@ void run_slave_ui(void)
 void print_pattern_state(uint8_t control)
 {
 	uint8_t mode = 0;
-	uint16_t row, col;
 
 	PRINTF("%s", hide_cursor);
 	set_cursor PATTERN_STATE_ROW_COL;
@@ -475,7 +517,7 @@ void print_connection_status(void)
 	}
 }
 
-void update_config_screen(void)
+void print_config_values(void)
 {
 	/* Draw configuration values */
 	for (uint16_t line = 0; line <= MAX_DOWN; line++) {
@@ -668,6 +710,34 @@ void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed
 	}
 }
 
+
+uint8_t parse_color(char* color_str)
+{
+	uint8_t result = 0;
+	char color[2] = "0";
+
+	color[0] = color_str[RED_OFFSET];
+	result |= (atoi(color) & 0x07) << 5;
+	color[0] = color_str[GREEN_OFFSET];
+	result |= (atoi(color) & 0x07) << 2;
+	color[0] = color_str[BLUE_OFFSET];
+	result |= atoi(color) & 0x03;
+
+	return result;
+}
+
+void color_to_str(uint8_t color, char* str_out)
+{
+	char number_str[2];
+
+	itoa((color & 0b11100000) >> 5, number_str, 10);
+	str_out[RED_OFFSET] = number_str[0];
+	itoa((color & 0b00011100) >> 2, number_str, 10);
+	str_out[GREEN_OFFSET] = number_str[0];
+	itoa((color & 0b00000011) >> 0, number_str, 10);
+	str_out[BLUE_OFFSET] = number_str[0];
+}
+
 void set_cursor(uint16_t row, uint16_t col)
 {
 	char row_str[4], col_str[4];
@@ -775,31 +845,4 @@ void clear_next(uint8_t length)
 		PRINTF(" ");
 	}
 	move_cursor_left(length);
-}
-
-uint8_t parse_color(char* color_str)
-{
-	uint8_t result = 0;
-	char color[2] = "0";
-
-	color[0] = color_str[RED_OFFSET];
-	result |= (atoi(color) & 0x07) << 5;
-	color[0] = color_str[GREEN_OFFSET];
-	result |= (atoi(color) & 0x07) << 2;
-	color[0] = color_str[BLUE_OFFSET];
-	result |= atoi(color) & 0x03;
-
-	return result;
-}
-
-void color_to_str(uint8_t color, char* str_out)
-{
-	char number_str[2];
-
-	itoa((color & 0b11100000) >> 5, number_str, 10);
-	str_out[RED_OFFSET] = number_str[0];
-	itoa((color & 0b00011100) >> 2, number_str, 10);
-	str_out[GREEN_OFFSET] = number_str[0];
-	itoa((color & 0b00000011) >> 0, number_str, 10);
-	str_out[BLUE_OFFSET] = number_str[0];
 }

@@ -53,6 +53,7 @@
 
 static QueueHandle_t communication_queue;
 static QueueHandle_t device_status_queue;
+static QueueHandle_t pattern_control_queue;
 // none
 
 
@@ -422,6 +423,7 @@ void communication_task(void* pvParameter)
 	_Bool device_status;
 	communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
 	device_status_queue = get_queue_handle(DEVICE_STATUS_QUEUE);
+	pattern_control_queue = get_queue_handle(PATTERN_CONTROL_QUEUE);
 	switch (ismaster) {
 		case true:
 			/*MASTER MODE*/
@@ -432,6 +434,7 @@ void communication_task(void* pvParameter)
 						/*Control Byte Only*/
 						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));
 						if(xfer_status!=kStatus_Success){
+							xQueueSend(pattern_control_queue,&config,0);
 //							//PRINTF("CONTROL BIT FAILED");
 						}
 						//temp_config.control_mode = config.control_mode;
@@ -445,6 +448,7 @@ void communication_task(void* pvParameter)
 							if (xfer_status !=kStatus_Success) {
 //								//PRINTF("\r\nTransfer Failed To Slave Config");
 							}
+							xQueueSend(pattern_control_queue,&config,0);
 						} else{
 							device_status = false;
 							xQueueSend(device_status_queue,&device_status,0);
@@ -485,11 +489,13 @@ void communication_task(void* pvParameter)
 									temp_config.stop_color[0] = config.start_color[0];
 									config.start_color[0]=config.stop_color[0];
 									config.stop_color[0]=temp_config.stop_color[0];
+									xQueueSend(pattern_control_queue,&config,0);
 									xQueueSend(communication_queue,&config,0);
 									g_SlaveCompletionFlag=false;
 									break;
 								case 0x11:
 									config.control_mode = rx_buff[1];
+									xQueueSend(pattern_control_queue,&config,0);
 									xQueueSend(communication_queue,&config,0);
 //									//PRINTF("%d",config.control_mode);
 //									//PRINTF("CONTROl DETECTED");

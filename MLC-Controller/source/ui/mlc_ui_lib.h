@@ -11,6 +11,7 @@
 #ifndef MLC_UI_DRIVERS_H_
 #define MLC_UI_DRIVERS_H_
 
+#include "mlc_common.h"
 /***********************************
 * Const and Macro Defines
 ***********************************/
@@ -101,7 +102,8 @@ const char config_description[][2][50] = {{" (R, G, B)       ", " (0,0,0) - (7,7
 										  {" PWM frequency   ", " 0 - 9999         "}
 										};
 
-const char step_mode_name[][CONFIG_VALUE_LENGTH] = {"1.Auto Up",
+const char step_mode_name[][CONFIG_VALUE_LENGTH] = {"",
+													"1.Auto Up",
 													"2.Auto Down",
 													"3.Auto Up-Down",
 													"4.Manual"
@@ -134,11 +136,17 @@ typedef enum {
 /***********************************
 * Variable Declarations
 ***********************************/
-//extern _Bool master_mode;
+
 // none
 
 /***********************************
 * Prototypes
 ***********************************/
-
+void set_cursor(uint16_t row, uint16_t col);
+void move_cursor_left(uint16_t no_of_times);
+void insert(char* str, uint16_t position, char input);
+void delete(char* str, uint16_t position);
+void clear_next(uint8_t length);
+void draw_dotted_square(uint16_t length, uint16_t breadth);
+void draw_square(uint16_t length, uint16_t breadth);
 #endif /* MLC_UI_DRIVERS_H_ */
