@@ -10,6 +10,7 @@
  *******************************************/
 #define communication_task_PRIORITY  (configMAX_PRIORITIES - 2)
 #define master_task_PRIORITY (configMAX_PRIORITIES - 2)
+#define JUMPER_PIN 0U
 
 /***********************************
  * Typedefs and Enum Declarations
@@ -38,10 +39,15 @@
 /***********************************
  * Private Variables
  ***********************************/
-TaskHandle_t ui_handler_handle;
+static _Bool master_mode = true;
 
-QueueHandle_t communication_queue;
-QueueHandle_t slave_status_queue;
+TaskHandle_t ui_handler_handle;
+TaskHandle_t pattern_executor_handler;
+static QueueHandle_t communication_queue;
+static QueueHandle_t device_status_queue;
+static QueueHandle_t pattern_status_queue;
+static QueueHandle_t pattern_control_queue;
+
 
 /***********************************
  * Private Prototypes
@@ -61,20 +67,20 @@ int main(void) {
     BOARD_InitBootPeripherals();
     BOARD_InitDebugConsole();
 
+    /* queue creations */
+    master_mode = GPIO_PinRead(GPIOD, JUMPER_PIN);
+    communication_queue = xQueueCreate(2, sizeof(led_config_type));
+    device_status_queue = xQueueCreate(1, sizeof(_Bool));
+    pattern_status_queue = xQueueCreate(1, sizeof(uint8_t));
+    pattern_control_queue=xQueueCreate(2,sizeof(led_config_type));
 
-    communication_queue = xQueueCreate(1, sizeof (led_config_type));
-    slave_status_queue = xQueueCreate(1, sizeof (_Bool));
+    /* task creations */
+    xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, &master_mode, 4, NULL);
+    xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE+200, NULL,4 ,&pattern_executor_handler);
+    xTaskCreate(ui_handler_task, "UI Task", configMINIMAL_STACK_SIZE + 100, &master_mode, 4, &ui_handler_handle);
+    xTimerCreate("Check Control Timer", TIMER_PERIOD, pdTRUE, 0, check_control_mode);
 
-    if(xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, (void*)true, 4, NULL)!=pdPASS){
-    	PRINTF("\r\nCommunication Task Creation failed");
-    }
-
-
-    /* UI_handler task creation */
-    xTaskCreate(ui_handler_task, "task1", configMINIMAL_STACK_SIZE + 100, NULL, 4, &ui_handler_handle);
-
-
-    /* Start scheduler */
+    /* start scheduler */
     vTaskStartScheduler();
 	for (; ;) {
 	}
@@ -90,8 +96,16 @@ QueueHandle_t get_queue_handle(queue_enum queue_requested)
 			queue = communication_queue;
 			break;
 
-		case SLAVE_STATUS_QUEUE :
-			queue = slave_status_queue;
+		case DEVICE_STATUS_QUEUE :
+			queue = device_status_queue;
+			break;
+
+		case PATTERN_STATUS_QUEUE :
+			queue = pattern_status_queue;
+			break;
+
+		case PATTERN_CONTROL_QUEUE :
+			queue = pattern_control_queue;
 			break;
 
 		default :

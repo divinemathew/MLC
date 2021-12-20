@@ -125,6 +125,8 @@ pin_labels:
 #include "fsl_gpio.h"
 #include "pin_mux.h"
 
+#define JUMPER_PIN 0U
+
 /* FUNCTION ************************************************************************************************************
  *
  * Function Name : BOARD_InitBootPins
@@ -158,9 +160,27 @@ void BOARD_InitPins(void)
 {
     /* Port A Clock Gate Control: Clock enabled */
     CLOCK_EnableClock(kCLOCK_PortA);
+    CLOCK_EnableClock(kCLOCK_PortD);
+
+    /* I2C pin configurations */
+    const port_pin_config_t jumper_pin_config = {
+    	kPORT_PullUp,
+        kPORT_FastSlewRate,
+        kPORT_PassiveFilterDisable,
+        kPORT_OpenDrainDisable,
+        kPORT_LowDriveStrength,
+        kPORT_MuxAsGpio,
+		kPORT_UnlockRegister
+    };
+
+	gpio_pin_config_t jumper_config = {
+		.pinDirection = kGPIO_DigitalInput,
+	};
+	GPIO_PinInit(GPIOD, JUMPER_PIN, &jumper_config);
 
     /* PORTA2 (pin 36) is configured as TRACE_SWO */
     PORT_SetPinMux(PORTA, 2U, kPORT_MuxAlt7);
+    PORT_SetPinConfig(PORTD, JUMPER_PIN, &jumper_pin_config);
 
     PORTA->PCR[2] = ((PORTA->PCR[2] &
                       /* Mask bits to zero which are setting */
