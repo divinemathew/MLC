@@ -72,7 +72,7 @@ void pattern_executor_task(void *pvParameters)
 		} else {
 			/* queue is empty */
 			/* execute with current configuration */
-			led_execution(local_config);
+			//led_execution(local_config);
 
 		}
 	}
@@ -175,7 +175,7 @@ void led_execution(led_config_type *config)
 		 default:
 		  break;
 		}
-	} else{
+	} /*else{
 	  /* Manual mode */
 
 	  currentcolor=*((uint8_t *)pvTaskGetThreadLocalStoragePointer(pattern_executor_handler,\
@@ -185,7 +185,7 @@ void led_execution(led_config_type *config)
 	  } else if(controlmode == DOWN) {
 		pwm_down_execution(currentcolor, currentcolor-1,1);
 	  }
-	}
+	}*/
 
 }
 
@@ -310,7 +310,7 @@ void ftm_init(uint16_t frequency)
 
 	ftmParam[1].level=kFTM_LowTrue;
 	ftmParam[2].level=kFTM_LowTrue;
-	ftmParam[3].level=kFTM_LowTrue;
+		ftmParam[3].level=kFTM_LowTrue;
 
 	ftmParam[1].firstEdgeDelayPercent=0;
 	ftmParam[2].firstEdgeDelayPercent=0;
@@ -356,8 +356,9 @@ void get_default_config(led_config_type *config)
 void check_control_mode(TimerHandle_t timer)
 {
 
-	xQueueReceive(pattern_control_queue, local_config, 0);
+	//xQueueReceive(pattern_control_queue, local_config, 0);
 	uint8_t ctrl_mode;
+	uint8_t currentcolor;
 	ctrl_mode=local_config->control_mode &(START |  STOP |\
 									PAUSE | RESUME | UP | DOWN);
 	switch(ctrl_mode){
@@ -376,31 +377,39 @@ void check_control_mode(TimerHandle_t timer)
 		 break;
 
 		case PAUSE:
-		 vTaskSetThreadLocalStoragePointer(pattern_executor_handler,\
+		/* vTaskSetThreadLocalStoragePointer(pattern_executor_handler,\
 				 THREAD_LOCAL_STORAGE_INDEX+1,(void *)&local_config->stop_color[0]);
 		 local_config->stop_color[0]=\
 				 *((uint8_t *)pvTaskGetThreadLocalStoragePointer\
 						 (pattern_executor_handler, THREAD_LOCAL_STORAGE_INDEX));
-		 led_execution(local_config);
+		 led_execution(local_config);*/
+			vTaskSuspend(pattern_executor_handler);
 		 /* pause logic */
 		 break;
 
 		case RESUME:
 		 /* resume logic */
-			local_config->stop_color[0]=\
+			/*local_config->stop_color[0]=\
 			*((uint8_t *)pvTaskGetThreadLocalStoragePointer\
 					(pattern_executor_handler,THREAD_LOCAL_STORAGE_INDEX+1));
-			led_execution(local_config);
+			led_execution(local_config);*/
+			vTaskResume(pattern_executor_handler);
 		 break;
 
 		case UP:
 		 /* manual up mode */
-		 led_execution(local_config);
+		 /*led_execution(local_config);*/
+			 currentcolor=*((uint8_t *)pvTaskGetThreadLocalStoragePointer(pattern_executor_handler,\
+						  THREAD_LOCAL_STORAGE_INDEX)); pwm_up_execution(currentcolor+1, currentcolor+1,local_config->step_value);
+			 pwm_up_execution(currentcolor+1, currentcolor+1,local_config->step_value);
 		 break;
 
 		case DOWN:
-		  led_execution(local_config);
+		  /*led_execution(local_config);*/
 		 /* manual down mode */
+			currentcolor=*((uint8_t *)pvTaskGetThreadLocalStoragePointer(pattern_executor_handler,\
+									  THREAD_LOCAL_STORAGE_INDEX));
+			pwm_down_execution(currentcolor-1, currentcolor-1,local_config->step_value);
 		 break;
 
 		default:
