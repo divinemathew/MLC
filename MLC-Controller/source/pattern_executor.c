@@ -47,7 +47,7 @@ void pattern_executor_task(void *pvParameters)
 
 	while(1){
 //		xQueueReceive(pattern_control_queue, local_config, 10000);
-//		led_execution(local_config);
+		led_execution(local_config);
 
 		if(xQueueReceive(pattern_control_queue, received_config, 0)==pdPASS){
 			/* 2 Ticks equivalent to 10ms */
