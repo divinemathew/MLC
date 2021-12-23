@@ -76,7 +76,7 @@ void run_master_ui(void);
 void run_slave_ui(void);
 void print_config_values(void);
 void draw_ui(void);
-void update_status_periodic(void* pvParameter);
+void update_status_task(void* pvParameter);
 uint8_t parse_color(char* color_str);
 void color_to_str(uint8_t color, char* str_out);
 void print_pattern_state(uint8_t control);
@@ -96,8 +96,7 @@ void ui_handler_task(void* board_is_master)
 	pattern_status_queue = get_queue_handle(PATTERN_STATUS_QUEUE);
 	console = xSemaphoreCreateBinary();
 	xSemaphoreGive(console);
-    xTaskCreate(update_status_periodic, "UTask", configMINIMAL_STACK_SIZE + 100, NULL, 4, NULL);
-
+    xTaskCreate(update_status_task, "UTask", configMINIMAL_STACK_SIZE + 100, NULL, 4, NULL);
 
     master_mode = *((_Bool*)board_is_master);
     configuration.start_color[0] = parse_color(config_value_str[START_COLOR]);
@@ -119,16 +118,16 @@ void ui_handler_task(void* board_is_master)
 }
 
 /**
-* @brief Lists all the customer details.
+* @brief Lists a.
 *
-* Lists all members of customer type data in the file.
+* Li.
 *
-* @param The pointer to file containing customer type
+* @param The
 *
 * @note
 *
 * Revision History:
-* - 270921 ATG: Creation Date
+* - 171221 ATG: Creation Date
 */
 void draw_ui(void)
 {
@@ -197,66 +196,91 @@ void draw_ui(void)
 	PRINTF("%s", show_cursor);
 }
 
-void update_status_periodic(void* pvParameter)
-{while(1){
-	xSemaphoreTake(console, 100);
-	uint8_t current_color = 0;
-	int16_t row, col;
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
+void update_status_task(void* pvParameter)
+{
+	while(1) {
+		xSemaphoreTake(console, 100);
+		uint8_t current_color = 0;
+		int16_t row, col;
 
-	print_connection_status();
+		print_connection_status();
 
-	/* Redraw current color */
-	PRINTF("%s", hide_cursor);
-	if (xQueueReceive(pattern_status_queue, &current_color, 0)) {
-		set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
-		color_to_str(current_color, current_color_str);
-		PRINTF("%s", current_color_str);
+		/* Redraw current color */
+		PRINTF("%s", hide_cursor);
+		if (xQueueReceive(pattern_status_queue, &current_color, 0)) {
+			set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
+			color_to_str(current_color, current_color_str);
+			PRINTF("%s", current_color_str);
 
-		/* Redraw pattern position */
-		set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
-		PRINTF("%s", "[##################   ]");
+			/* Redraw pattern position */
+			set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
+			PRINTF("%s", "[##################   ]");
+		}
+
+		/* Next frame of animation */
+		set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[MODE_LINE]) + CONFIG_COL);
+		if (anime_frame_1 && master_mode) {
+			if (step_mode > AUTO_UP) {
+				PRINTF("< ");
+			} else {
+				PRINTF("  ");
+			}
+			row = CONFIG_ROW + (MODE_LINE * LINE_SPACE);
+			col = strlen(config_name[MODE_LINE]) + strlen(step_mode_name[step_mode]) + CONFIG_COL + 2;
+			set_cursor(row, col);
+			if (step_mode < MANUAL) {
+				PRINTF(" >");
+			} else {
+				PRINTF("  ");
+			}
+			anime_frame_1 = false;
+		} else if (master_mode){
+			if (step_mode > AUTO_UP) {
+				PRINTF(" <");
+			} else {
+				PRINTF("  ");
+			}
+			row = CONFIG_ROW + (MODE_LINE * LINE_SPACE);
+			col = strlen(config_name[MODE_LINE]) + strlen(step_mode_name[step_mode]) + CONFIG_COL + 2;
+			set_cursor(row, col);
+			if (step_mode < MANUAL) {
+				PRINTF("> ");
+			} else {
+				PRINTF("  ");
+			}
+			anime_frame_1 = true;
+		}
+
+		reset_cursor();
+		xSemaphoreGive(console);
+		vTaskDelay(STATUS_UPDATE_TICKS);
 	}
-
-	/* Next frame of animation */
-	set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[MODE_LINE]) + CONFIG_COL);
-	if (anime_frame_1 && master_mode) {
-		if (step_mode > AUTO_UP) {
-			PRINTF("< ");
-		} else {
-			PRINTF("  ");
-		}
-		row = CONFIG_ROW + (MODE_LINE * LINE_SPACE);
-		col = strlen(config_name[MODE_LINE]) + strlen(step_mode_name[step_mode]) + CONFIG_COL + 2;
-		set_cursor(row, col);
-		if (step_mode < MANUAL) {
-			PRINTF(" >");
-		} else {
-			PRINTF("  ");
-		}
-		anime_frame_1 = false;
-	} else if (master_mode){
-		if (step_mode > AUTO_UP) {
-			PRINTF(" <");
-		} else {
-			PRINTF("  ");
-		}
-		row = CONFIG_ROW + (MODE_LINE * LINE_SPACE);
-		col = strlen(config_name[MODE_LINE]) + strlen(step_mode_name[step_mode]) + CONFIG_COL + 2;
-		set_cursor(row, col);
-		if (step_mode < MANUAL) {
-			PRINTF("> ");
-		} else {
-			PRINTF("  ");
-		}
-		anime_frame_1 = true;
-	}
-
-	reset_cursor();
-	xSemaphoreGive(console);
-	vTaskDelay(100);
-}
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void reset_cursor(void)
 {
 	uint16_t row, col;
@@ -269,6 +293,18 @@ void reset_cursor(void)
 	}
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void run_master_ui(void)
 {
 	char key_pressed;
@@ -316,9 +352,7 @@ void run_master_ui(void)
 			case 'S' :
 				/* send STOP command */
 				configuration.control_mode = STOP;
-				while (uxQueueMessagesWaiting(communication_queue) > 0) {
-				}
-				xQueueSend(communication_queue, &configuration, 0);
+				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 				print_pattern_state(configuration.control_mode);
 				pattern_running = false;
 				break;
@@ -329,13 +363,11 @@ void run_master_ui(void)
 				if (pattern_paused && pattern_running) {
 					configuration.control_mode = RESUME;
 					pattern_paused = false;
-				} else if (pattern_running){
+				} else if (pattern_running) {
 					configuration.control_mode = PAUSE;
 					pattern_paused = true;
 				}
-				while (uxQueueMessagesWaiting(communication_queue) > 0) {
-				}
-				xQueueSend(communication_queue, &configuration, 0);
+				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 				print_pattern_state(configuration.control_mode);
 				break;
 
@@ -344,15 +376,11 @@ void run_master_ui(void)
 				if (config_is_valid()) {
 					if (config_edited) {
 						configuration.control_mode = NOP;
-						while (uxQueueMessagesWaiting(communication_queue) > 0) {
-						}
-						xQueueSend(communication_queue, &configuration, 0);
+						xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 						config_edited = false;
 					}
 					configuration.control_mode = START;
-					while (uxQueueMessagesWaiting(communication_queue) > 1) {
-					}
-					xQueueSend(communication_queue, &configuration, 0);
+					xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 					pattern_running = true;
 					print_pattern_state(configuration.control_mode);
 					taskYIELD();
@@ -366,18 +394,14 @@ void run_master_ui(void)
 			case 'a' :
 				/* send DOWN command */
 				configuration.control_mode = DOWN;
-				while (uxQueueMessagesWaiting(communication_queue) > 0) {
-				}
-				xQueueSend(communication_queue, &configuration, 0);
+				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 				break;
 
 			case 'D' :
 			case 'd' :
 				/* send DOWN command */
 				configuration.control_mode = UP;
-				while (uxQueueMessagesWaiting(communication_queue) > 0) {
-				}
-				xQueueSend(communication_queue, &configuration, 0);
+				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 				break;
 
 			default :
@@ -386,6 +410,18 @@ void run_master_ui(void)
 	}
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 _Bool config_is_valid(void)
 {
 	_Bool config_valid = true;
@@ -430,6 +466,18 @@ _Bool config_is_valid(void)
 	return config_valid;
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void run_slave_ui(void)
 {
 	xSemaphoreTake(console, 100);
@@ -443,8 +491,7 @@ void run_slave_ui(void)
 				color_to_str(configuration.start_color[0], config_value_str[START_COLOR]);
 				color_to_str(configuration.stop_color[0], config_value_str[STOP_COLOR]);
 				itoa(configuration.step_value, config_value_str[STEP_VALUE], 10);
-				if (configuration.step_mode <=
-						MAX_MODE_VALUE) {
+				if (configuration.step_mode <= MAX_MODE_VALUE) {
 					strcpy(config_value_str[STEP_MODE], step_mode_name[configuration.step_mode]);
 					step_mode = configuration.step_mode;
 				}
@@ -467,6 +514,18 @@ void run_slave_ui(void)
 	}
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void print_pattern_state(uint8_t control)
 {
 	uint8_t mode = 0;
@@ -493,6 +552,19 @@ void print_pattern_state(uint8_t control)
 	print_connection_status();
 	reset_cursor();
 }
+
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void print_connection_status(void)
 {
 	if (xQueueReceive(device_status_queue, &device_connected, 0)) {
@@ -517,6 +589,18 @@ void print_connection_status(void)
 	}
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void print_config_values(void)
 {
 	/* Draw configuration values */
@@ -533,6 +617,18 @@ void print_config_values(void)
 	clear_next(8);
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void change_line(void)
 {
 	switch (cursor_line) {
@@ -570,6 +666,18 @@ void change_line(void)
 	reset_cursor();
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void process_ui_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (cursor_line) {
@@ -590,6 +698,18 @@ void process_ui_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 	}
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void read_color_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (key_pressed) {
@@ -633,6 +753,18 @@ void read_color_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (arrow_pressed) {
@@ -662,6 +794,18 @@ void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 	}
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (arrow_pressed) {
@@ -710,7 +854,18 @@ void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed
 	}
 }
 
-
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 uint8_t parse_color(char* color_str)
 {
 	uint8_t result = 0;
@@ -726,6 +881,18 @@ uint8_t parse_color(char* color_str)
 	return result;
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void color_to_str(uint8_t color, char* str_out)
 {
 	char number_str[2];
@@ -738,6 +905,18 @@ void color_to_str(uint8_t color, char* str_out)
 	str_out[BLUE_OFFSET] = number_str[0];
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void set_cursor(uint16_t row, uint16_t col)
 {
 	char row_str[4], col_str[4];
@@ -750,6 +929,18 @@ void set_cursor(uint16_t row, uint16_t col)
 	PRINTF("%c", coordinates[5]);
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void move_cursor_left(uint16_t no_of_times)
 {
 	char no_of_times_str[4];
@@ -760,6 +951,18 @@ void move_cursor_left(uint16_t no_of_times)
 	}
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void insert(char* str, uint16_t position, char input)
 {
 	int16_t length = strlen(str) - 1;
@@ -770,6 +973,18 @@ void insert(char* str, uint16_t position, char input)
 	str[position] = input;
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void delete(char* str, uint16_t position)
 {
 	int16_t length = strlen(str) - 1;
@@ -779,6 +994,18 @@ void delete(char* str, uint16_t position)
 	str[position] = '\0';
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void draw_dotted_square(uint16_t length, uint16_t breadth)
 {
 	/* Print line to right */
@@ -809,6 +1036,18 @@ void draw_dotted_square(uint16_t length, uint16_t breadth)
 	}
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void draw_square(uint16_t length, uint16_t breadth)
 {
 	/* Print line to right */
@@ -839,6 +1078,18 @@ void draw_square(uint16_t length, uint16_t breadth)
 	}
 }
 
+/**
+* @brief Lists a.
+*
+* Li.
+*
+* @param The
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void clear_next(uint8_t length)
 {
 	for (uint8_t len = 0; len < length; len++) {
