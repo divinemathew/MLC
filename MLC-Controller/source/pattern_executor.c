@@ -45,12 +45,13 @@ void pattern_executor_task(void *pvParameters)
 	pattern_control_queue = get_queue_handle(PATTERN_CONTROL_QUEUE);
 	pattern_status_queue = get_queue_handle(PATTERN_STATUS_QUEUE);
 
-
 	while(1){
+//		xQueueReceive(pattern_control_queue, local_config, 10000);
+//		led_execution(local_config);
 
 		if(xQueueReceive(pattern_control_queue, received_config, 0)==pdPASS){
 			/* 2 Ticks equivalent to 10ms */
-			if(received_config->control_mode){
+			if(0&received_config->control_mode){
 				/* control mode when control field !=0 */
 
 				/* copy configuration to local structure */
@@ -76,32 +77,31 @@ void pattern_executor_task(void *pvParameters)
 
 		}
 	}
-
 }
 
 
-void dummy_task(void *pvParameters)
-{
-
-	led_config_type *led_param;
-	led_param=pvPortMalloc(sizeof(led_config_type));
-
-	while(1){
-		////PRINTF("here dummy\n\r");
-		led_param->start_color[0]=10;
-		led_param->stop_color[0]=25;
-		led_param->step_value=1;
-		led_param->no_of_cycles=1;
-		led_param->step_mode=2;
-		led_param->color_change_rate=50;
-		led_param->refresh_rate=1000;
-		led_param->control_mode=0;
-
-		xQueueSend(pattern_control_queue,led_param,0);
-	}
-
-
-}
+//void dummy_task(voireceived_configd *pvParameters)
+//{
+//
+//	led_config_type *led_param;
+//	led_param=pvPortMalloc(sizeof(led_config_type));
+//
+//	while(1){
+//		////PRINTF("here dummy\n\r");
+//		led_param->start_color[0]=10;
+//		led_param->stop_color[0]=25;
+//		led_param->step_value=1;
+//		led_param->no_of_cycles=1;
+//		led_param->step_mode=2;
+//		led_param->color_change_rate=50;
+//		led_param->refresh_rate=1000;
+//		led_param->control_mode=0;
+//
+//		xQueueSend(pattern_control_queue,led_param,0);
+//	}
+//
+//
+//}
 
 
 void led_execution(led_config_type *config)
@@ -178,14 +178,14 @@ void led_execution(led_config_type *config)
 	} /*else{
 	  /* Manual mode */
 
-	  currentcolor=*((uint8_t *)pvTaskGetThreadLocalStoragePointer(pattern_executor_handler,\
-			  THREAD_LOCAL_STORAGE_INDEX));
-	  if(controlmode== UP){
-		  pwm_up_execution(currentcolor, currentcolor+1,1);	/*check for step val */
-	  } else if(controlmode == DOWN) {
-		pwm_down_execution(currentcolor, currentcolor-1,1);
-	  }
-	}*/
+//	  currentcolor=*((uint8_t *)pvTaskGetThreadLocalStoragePointer(pattern_executor_handler,\
+//			  THREAD_LOCAL_STORAGE_INDEX));
+//	  if(controlmode== UP){
+//		  pwm_up_execution(currentcolor, currentcolor+1,1);	/*check for step val */
+//	  } else if(controlmode == DOWN) {
+//		pwm_down_execution(currentcolor, currentcolor-1,1);
+//	  }
+//	}
 
 }
 
@@ -322,7 +322,14 @@ void ftm_init(uint16_t frequency)
 
 	ftmParam[1].enableDeadtime=false;
 	ftmParam[2].enableDeadtime=false;
-	ftmParam[3].enableDeadtime=false;
+	ftmParam[3].enableDeadtime=false;//	  currentcolor=*((uint8_t *)pvTaskGetThreadLocalStoragePointer(pattern_executor_handler,\
+	//			  THREAD_LOCAL_STORAGE_INDEX));
+	//	  if(controlmode== UP){
+	//		  pwm_up_execution(currentcolor, currentcolor+1,1);	/*check for step val */
+	//	  } else if(controlmode == DOWN) {
+	//		pwm_down_execution(currentcolor, currentcolor-1,1);
+	//	  }
+	//	}
 
 	FTM_SetupPwm(BOARD_FTM_BASEADDR, &ftmParam[1], 3, kFTM_EdgeAlignedPwm, local_config->refresh_rate, FTM_SOURCE_CLOCK);
 	FTM_StartTimer(BOARD_FTM_BASEADDR, kFTM_SystemClock);
@@ -338,14 +345,14 @@ void get_default_config(led_config_type *config)
 	/*configuration field*/
 
 	config->start_color[0]=0;
-	config->stop_color[0]=0;
+	config->stop_color[0]=255;
 	config->step_value=1;
-	config->color_change_rate=0;
-	config->step_mode=0;
+	config->color_change_rate=100;
+	config->step_mode=1;
 	config->no_of_cycles=1;
 
 	/*control field*/
-	config->refresh_rate=1;
+	config->refresh_rate=100;
 	config->color_scheme=EIGHT_BIT_TRUE_COLOR;
 	config->control_mode=0;
 
