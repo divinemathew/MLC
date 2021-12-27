@@ -27,8 +27,11 @@
 #define BOARD_FTM_CHANNEL1  kFTM_Chnl_1   // PTD1 12 BLUE
 #define BOARD_FTM_CHANNEL2  kFTM_Chnl_2  //PTD2 pin 8 RED
 #define BOARD_FTM_CHANNEL3  kFTM_Chnl_3  //PTD3 pin 10 GREEN
-#define BASE_ADDR 			FTM0
-#define BOARD_FTM_CHANNEL0	kFTM_Chnl_0
+
+#define MLC_FTM 			FTM3
+#define FTM_BLUE_CHANNEL    kFTM_Chnl_1   // PTD1 12 BLUE
+#define FTM_RED_CHANNEL     kFTM_Chnl_2  //PTD2 pin 8 RED
+#define FTM_GREEN_CHANNEL   kFTM_Chnl_3  //PTD3 pin 10 GREEN
 
 
 /* Get source clock for FTM driver */
@@ -75,17 +78,17 @@
 * Const and Macro Defines
 ***********************************/
 
-#define DUTY_CYCLE_RED(x)	(((x)*100)/7)
-#define DUTY_CYCLE_GREEN(x)	(((x)*100)/7)
-#define DUTY_CYCLE_BLUE(x)	(((x)*100)/3)
+#define DUTY_CYCLE_RED(x)	(((x & RED_MASK_VAL) >> RED_SHIFT_VAL) * 100) / 7
+#define DUTY_CYCLE_GREEN(x)	(((x & GREEN_MASK_VAL) >> GREEN_SHIFT_VAL) * 100) / 7
+#define DUTY_CYCLE_BLUE(x)	(((x & BLUE_MASK_VAL) >> BLUE_SHIFT_VAL) * 100) / 3
 
-#define FREQUENCY_LIMIT(x)  ((x<45000)?1:0)
+#define FREQUENCY_LIMIT(x)  ((x < 45000)? 1 : 0)
 
 /***********************************
 * Typedefs and Enum Declarations
 ***********************************/
+typedef int16_t color_type;
 
-// none
 
 
 /***********************************
@@ -111,7 +114,7 @@
 void ftm_init(uint16_t);
 void pwm_up_execution(uint8_t, uint8_t,uint8_t);
 void pwm_down_execution(uint8_t, uint8_t,uint8_t);
-void update_color(uint8_t);
+void update_color(color_type);
 
 
 

@@ -173,6 +173,10 @@ void BOARD_InitPins(void)
 		kPORT_UnlockRegister
     };
 
+    PORT_SetPinMux(PORTD, 1U, kPORT_MuxAlt4);
+    PORT_SetPinMux(PORTD, 2U, kPORT_MuxAlt4);
+    PORT_SetPinMux(PORTD, 3U, kPORT_MuxAlt4);
+
 	gpio_pin_config_t jumper_config = {
 		.pinDirection = kGPIO_DigitalInput,
 	};

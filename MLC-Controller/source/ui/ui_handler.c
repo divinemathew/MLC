@@ -1,6 +1,14 @@
 /**
- * @file    MLC-Controller.c
- * @brief   Application entry point.
+ * @file ui_handler.c
+ * @brief Multi-color LED controller UI block
+ *
+ * This program prints a user interface on a serial monitor and
+ * validates user inputs.
+ *
+ * @note
+ *
+ * Revision History:
+ *	- 091221 ATG : Creation Date
  */
 
 #include "mlc_ui_lib.h"
@@ -10,11 +18,12 @@
 /*******************************************
  * Const and Macro Defines
  *******************************************/
-
+// none
 
 /***********************************
  * Typedefs and Enum Declarations
  ***********************************/
+// none
 
 /***********************************
  * External Variable Declarations
@@ -24,13 +33,11 @@ extern TaskHandle_t ui_handler_handle;
 /***********************************
  * Const Declarations
  ***********************************/
-
 // none
 
 /***********************************
  * Public Variables
  ***********************************/
-
 // none
 
 /***********************************
@@ -71,18 +78,19 @@ void read_color_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed);
 void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed);
 
-void change_line(void);
+void change_cursor_line(uint8_t line);
 void run_master_ui(void);
 void run_slave_ui(void);
 void print_config_values(void);
 void draw_ui(void);
-void update_status_periodic(void* pvParameter);
+void update_status_task(void* pvParameter);
 uint8_t parse_color(char* color_str);
 void color_to_str(uint8_t color, char* str_out);
 void print_pattern_state(uint8_t control);
 _Bool config_is_valid(void);
 void print_connection_status(void);
 void reset_cursor(void);
+void animate_arrow(void);
 
 
 /***********************************
@@ -90,15 +98,17 @@ void reset_cursor(void);
  ***********************************/
 void ui_handler_task(void* board_is_master)
 {
-	/* initialize queues and status timer */
+	/* initialize queues and create status task */
 	communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
 	device_status_queue = get_queue_handle(DEVICE_STATUS_QUEUE);
 	pattern_status_queue = get_queue_handle(PATTERN_STATUS_QUEUE);
+    xTaskCreate(update_status_task, "UTask", configMINIMAL_STACK_SIZE + 100, NULL, 4, NULL);
+
+    /* create semaphore to use console */
 	console = xSemaphoreCreateBinary();
 	xSemaphoreGive(console);
-    xTaskCreate(update_status_periodic, "UTask", configMINIMAL_STACK_SIZE + 100, NULL, 4, NULL);
 
-
+	/* initialize configuration with defaults */
     master_mode = *((_Bool*)board_is_master);
     configuration.start_color[0] = parse_color(config_value_str[START_COLOR]);
 	configuration.stop_color[0] = parse_color(config_value_str[STOP_COLOR]);
@@ -109,7 +119,7 @@ void ui_handler_task(void* board_is_master)
 	configuration.refresh_rate = atoi(config_value_str[REFRESH_RATE]);
     configuration.control_mode = NOP;
 
-    /* Clear screen and print UI */
+    /* Clear screen and start UI */
 	PRINTF("%s", clear);
 	if (master_mode) {
 		run_master_ui();
@@ -119,21 +129,24 @@ void ui_handler_task(void* board_is_master)
 }
 
 /**
-* @brief Lists all the customer details.
+* @brief Prints UI screen outline.
 *
-* Lists all members of customer type data in the file.
+* Redraws all static objects on screen.
 *
-* @param The pointer to file containing customer type
-*
+* @param
+* @return
 * @note
 *
 * Revision History:
-* - 270921 ATG: Creation Date
+* - 171221 ATG: Creation Date
 */
 void draw_ui(void)
 {
-	/* Draw title */
+	char pattern_position_str[POSITION_STR_LEN + 4] = PATTERN_POS_STR;
+
 	PRINTF("%s", hide_cursor);
+
+	/* Draw title */
 	set_cursor HEAD_1_ROW_COL;
 	move_cursor_left(TITLE_SQUARE_SIZE + 1);
 	PRINTF("%s%s", up, up);
@@ -164,7 +177,9 @@ void draw_ui(void)
 	set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
 	PRINTF("%s", "(0, 0, 0)");
 	set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
-	PRINTF("%s", "[          ]");
+	pattern_position_str[1] = PATTERN_POS_CHAR;
+	PRINTF("%s", pattern_position_str);
+
 	set_cursor PATTERN_STATE_ROW_COL;
 	PRINTF("%s%s", left, up);
 	draw_dotted_square(SMALL_SQUARE_SIZE, 1);
@@ -174,7 +189,6 @@ void draw_ui(void)
 	set_cursor(CONFIG_ROW - (LINE_SPACE + 2), CONFIG_COL - 1);
 	draw_dotted_square(SMALL_SQUARE_SIZE, 1);
 	PRINTF("    %s", config_title);
-	print_config_values();
 
 	/* Draw hind */
 	if (master_mode) {
@@ -194,30 +208,92 @@ void draw_ui(void)
 		PRINTF("RANGE");
 	}
 
-	PRINTF("%s", show_cursor);
+	reset_cursor();
 }
 
-void update_status_periodic(void* pvParameter)
-{while(1){
-	xSemaphoreTake(console, 100);
+/**
+* @brief Pattern status update task.
+*
+* Periodically checks for color change and manages UI animations.
+* Updates connection status and current color on UI.
+* Manages arrow animation and color position slider animation.
+*
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
+void update_status_task(void* pvParameter)
+{
+	TickType_t xLastWakeTime;
+	xLastWakeTime = xTaskGetTickCount();
 	uint8_t current_color = 0;
+
+	uint8_t tick_count = 0;
+
+	while(1) {
+		xSemaphoreTake(console, 100);
+		tick_count++;
+
+		char pattern_position_str[POSITION_STR_LEN + 4] = PATTERN_POS_STR;
+
+		print_connection_status();
+
+		/* Redraw current color */
+
+		if (xQueueReceive(pattern_status_queue, &current_color, 0)) {
+			PRINTF("%s", hide_cursor);
+
+			if (step_mode == MANUAL) {
+				set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
+				color_to_str(current_color, current_color_str);
+				PRINTF("%s", current_color_str);
+			}
+
+			/* Redraw pattern position */
+			set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
+			if (current_color < 255) {
+				pattern_position_str[((current_color * POSITION_STR_LEN) / 255) + 1] = PATTERN_POS_CHAR;
+			} else {
+				pattern_position_str[POSITION_STR_LEN] = PATTERN_POS_CHAR;
+			}
+			PRINTF("%s", pattern_position_str);
+		}
+
+		/* Next frame of arrow animation */
+		if (tick_count >= ANIMATE_TICKS) {
+			animate_arrow();
+			set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
+			color_to_str(current_color, current_color_str);
+			PRINTF("%s", current_color_str);
+			tick_count = 0;
+		}
+
+		reset_cursor();
+		xSemaphoreGive(console);
+		vTaskDelayUntil(&xLastWakeTime, STATUS_UPDATE_TICKS);
+	}
+}
+
+/**
+* @brief Animate mode arrow.
+*
+* Animates arrow as step mode selection hind.
+* Arrow position is changed each time this function is called.
+*
+* @param
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
+void animate_arrow(void)
+{
 	int16_t row, col;
 
-	print_connection_status();
-
-	/* Redraw current color */
 	PRINTF("%s", hide_cursor);
-	if (xQueueReceive(pattern_status_queue, &current_color, 0)) {
-		set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
-		color_to_str(current_color, current_color_str);
-		PRINTF("%s", current_color_str);
-
-		/* Redraw pattern position */
-		set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
-		PRINTF("%s", "[##################   ]");
-	}
-
-	/* Next frame of animation */
 	set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[MODE_LINE]) + CONFIG_COL);
 	if (anime_frame_1 && master_mode) {
 		if (step_mode > AUTO_UP) {
@@ -250,13 +326,21 @@ void update_status_periodic(void* pvParameter)
 		}
 		anime_frame_1 = true;
 	}
-
-	reset_cursor();
-	xSemaphoreGive(console);
-	vTaskDelay(100);
-}
 }
 
+/**
+* @brief Reset cursor for user input.
+*
+* Resets cursor position back to the user input field after performing
+* other UI object updates.
+*
+* @param
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void reset_cursor(void)
 {
 	uint16_t row, col;
@@ -269,6 +353,18 @@ void reset_cursor(void)
 	}
 }
 
+/**
+* @brief Switch UI to master_mode.
+*
+* Non returning function for performing master mode UI operations.
+*
+* @param
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void run_master_ui(void)
 {
 	char key_pressed;
@@ -278,7 +374,9 @@ void run_master_ui(void)
 	/* print master home screen */
 	xSemaphoreTake(console, 0);
 	draw_ui();
-	change_line();
+	print_config_values();
+
+	change_cursor_line(cursor_line);
 	for ( ; ; ) {
 		xSemaphoreGive(console);
 		key_pressed = GETCHAR();
@@ -300,14 +398,12 @@ void run_master_ui(void)
 				} else if (key_pressed == 'A') {
 					if (cursor_line > MAX_UP) {
 						PRINTF("%s", up);
-						cursor_line--;
-						change_line();
+						change_cursor_line(--cursor_line);
 					}
 				} else if (key_pressed == 'B') {
 					if (cursor_line < MAX_DOWN) {
 						PRINTF("%s", down);
-						cursor_line++;
-						change_line();
+						change_cursor_line(++cursor_line);
 					}
 				}
 				break;
@@ -316,9 +412,8 @@ void run_master_ui(void)
 			case 'S' :
 				/* send STOP command */
 				configuration.control_mode = STOP;
-				while (uxQueueMessagesWaiting(communication_queue) > 0) {
-				}
-				xQueueSend(communication_queue, &configuration, 0);
+				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
+				print_connection_status();
 				print_pattern_state(configuration.control_mode);
 				pattern_running = false;
 				break;
@@ -329,13 +424,12 @@ void run_master_ui(void)
 				if (pattern_paused && pattern_running) {
 					configuration.control_mode = RESUME;
 					pattern_paused = false;
-				} else if (pattern_running){
+				} else if (pattern_running) {
 					configuration.control_mode = PAUSE;
 					pattern_paused = true;
 				}
-				while (uxQueueMessagesWaiting(communication_queue) > 0) {
-				}
-				xQueueSend(communication_queue, &configuration, 0);
+				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
+				print_connection_status();
 				print_pattern_state(configuration.control_mode);
 				break;
 
@@ -344,16 +438,13 @@ void run_master_ui(void)
 				if (config_is_valid()) {
 					if (config_edited) {
 						configuration.control_mode = NOP;
-						while (uxQueueMessagesWaiting(communication_queue) > 0) {
-						}
-						xQueueSend(communication_queue, &configuration, 0);
+						xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 						config_edited = false;
 					}
 					configuration.control_mode = START;
-					while (uxQueueMessagesWaiting(communication_queue) > 1) {
-					}
-					xQueueSend(communication_queue, &configuration, 0);
+					xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 					pattern_running = true;
+					print_connection_status();
 					print_pattern_state(configuration.control_mode);
 					taskYIELD();
 				} else {
@@ -366,18 +457,20 @@ void run_master_ui(void)
 			case 'a' :
 				/* send DOWN command */
 				configuration.control_mode = DOWN;
-				while (uxQueueMessagesWaiting(communication_queue) > 0) {
-				}
-				xQueueSend(communication_queue, &configuration, 0);
+				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 				break;
 
 			case 'D' :
 			case 'd' :
 				/* send DOWN command */
 				configuration.control_mode = UP;
-				while (uxQueueMessagesWaiting(communication_queue) > 0) {
-				}
-				xQueueSend(communication_queue, &configuration, 0);
+				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
+				break;
+
+			case 'R' :
+			case 'r' :
+				draw_ui();
+				print_config_values();
 				break;
 
 			default :
@@ -386,6 +479,20 @@ void run_master_ui(void)
 	}
 }
 
+/**
+* @brief Checks if config is valid.
+*
+* Checks if within the range of all configuration values.
+* Converts all string inputs to binary form.
+*
+* @param
+*
+* @return Returns TRUE if valid.
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 _Bool config_is_valid(void)
 {
 	_Bool config_valid = true;
@@ -419,21 +526,35 @@ _Bool config_is_valid(void)
 	config_valid &= configuration.step_value >= MIN_STEP_VALUE;
 	config_valid &= configuration.no_of_cycles >= MIN_NO_OF_CYCLES;
 	config_valid &= configuration.color_change_rate >= MIN_CHANGE_RATE;
-	config_valid &= configuration.refresh_rate >= MIN_CHANGE_RATE;
+	config_valid &= configuration.refresh_rate >= MIN_REFRESH_RATE;
 
 	/* check if values are less than maximum */
 	config_valid &= configuration.step_value <= MAX_STEP_VALUE;
 	config_valid &= configuration.no_of_cycles <= MAX_NO_OF_CYCLES;
 	config_valid &= configuration.color_change_rate <= MAX_CHANGE_RATE;
-	config_valid &= configuration.refresh_rate <= MAX_CHANGE_RATE;
+	config_valid &= configuration.refresh_rate <= MAX_REFRESH_RATE;
 
 	return config_valid;
 }
 
+/**
+* @brief Switch to slave mode.
+*
+* Non returning function for slave mode UI operations.
+*
+* @param
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void run_slave_ui(void)
 {
 	xSemaphoreTake(console, 100);
 	draw_ui();
+	print_config_values();
+
 	xSemaphoreGive(console);
 	for (; ;) {
 		if (xQueueReceive(communication_queue, &configuration, 0)) {
@@ -443,8 +564,7 @@ void run_slave_ui(void)
 				color_to_str(configuration.start_color[0], config_value_str[START_COLOR]);
 				color_to_str(configuration.stop_color[0], config_value_str[STOP_COLOR]);
 				itoa(configuration.step_value, config_value_str[STEP_VALUE], 10);
-				if (configuration.step_mode <=
-						MAX_MODE_VALUE) {
+				if (configuration.step_mode <= MAX_MODE_VALUE) {
 					strcpy(config_value_str[STEP_MODE], step_mode_name[configuration.step_mode]);
 					step_mode = configuration.step_mode;
 				}
@@ -458,6 +578,7 @@ void run_slave_ui(void)
 
 				/* display control received */
 				xSemaphoreTake(console, 100);
+				print_connection_status();
 				print_pattern_state(configuration.control_mode);
 				xSemaphoreGive(console);
 			}
@@ -467,6 +588,18 @@ void run_slave_ui(void)
 	}
 }
 
+/**
+* @brief Prints current pattern state.
+*
+* Prints if the pattern is currently running or is in any other state.
+*
+* @param control	control input received
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void print_pattern_state(uint8_t control)
 {
 	uint8_t mode = 0;
@@ -489,13 +622,25 @@ void print_pattern_state(uint8_t control)
 	}
 	PRINTF("%s", pattern_state_const[mode]);
 
-	/* Redraw connection status */
-	print_connection_status();
 	reset_cursor();
 }
+
+/**
+* @brief Prints connection state.
+*
+* Prints if slave or master is connected or not in status field.
+*
+* @param
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void print_connection_status(void)
 {
 	if (xQueueReceive(device_status_queue, &device_connected, 0)) {
+		PRINTF("%s", hide_cursor);
 		set_cursor(STATUS_ROW + (0 * LINE_SPACE), strlen(status_name[0]) + STATUS_COL);
 		if (master_mode) {
 			if (device_connected) {
@@ -514,12 +659,24 @@ void print_connection_status(void)
 				clear_next(5);
 			}
 		}
+		reset_cursor();
 	}
 }
 
+/**
+* @brief Prints configuration values.
+*
+* Redraws all the configuration values with current configuration values.
+*
+* @param
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void print_config_values(void)
 {
-	/* Draw configuration values */
 	for (uint16_t line = 0; line <= MAX_DOWN; line++) {
 		set_cursor(CONFIG_ROW + (line * LINE_SPACE), CONFIG_COL);
 		PRINTF("%s", config_name[line]);
@@ -531,18 +688,33 @@ void print_config_values(void)
 	set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[MODE_LINE]) + CONFIG_COL + 2);
 	PRINTF("%s", config_value_str[MODE_LINE]);
 	clear_next(8);
+
+	reset_cursor();
 }
 
-void change_line(void)
+/**
+* @brief Move cursor to selected line.
+*
+* Sets cursor to right position after line is changed.
+* Updates config description and range values for the current line.
+*
+* @param line	 destination line to change to
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
+void change_cursor_line(uint8_t line)
 {
-	switch (cursor_line) {
+	switch (line) {
 
 		/* color data type */
 		case START_COLOR :
 		case STOP_COLOR :
 			cursor_pos = 1;
 			value_length = 9;
-			set_cursor(CONFIG_ROW + (cursor_line * LINE_SPACE), strlen(config_name[cursor_line]) + 1 + CONFIG_COL);
+			set_cursor(CONFIG_ROW + (line * LINE_SPACE), strlen(config_name[line]) + 1 + CONFIG_COL);
 			break;
 
 		/* number data type */
@@ -550,26 +722,41 @@ void change_line(void)
 		case NUMBER_OF_CYCLES :
 		case COLOR_CHANGE_RATE :
 		case REFRESH_RATE :
-			cursor_pos = strlen(config_value_str[cursor_line]);
+			cursor_pos = strlen(config_value_str[line]);
 			value_length = cursor_pos;
-			set_cursor(CONFIG_ROW + (cursor_line * LINE_SPACE), strlen(config_name[cursor_line]) + value_length + CONFIG_COL);
+			set_cursor(CONFIG_ROW + (line * LINE_SPACE), strlen(config_name[line]) + value_length + CONFIG_COL);
 			break;
 
 		/* change mode type input */
 		case STEP_MODE :
 			cursor_pos = strlen(step_mode_name[step_mode]) + 4;
 			value_length = cursor_pos;
-			set_cursor(CONFIG_ROW + (cursor_line * LINE_SPACE), strlen(config_name[cursor_line]) + value_length + CONFIG_COL);
+			set_cursor(CONFIG_ROW + (line * LINE_SPACE), strlen(config_name[line]) + value_length + CONFIG_COL);
 	}
 
+	PRINTF("%s", hide_cursor);
 	set_cursor(HINT_ROW - (0 * LINE_SPACE), HINT_COL);
-	PRINTF("%s", config_description[cursor_line][0]);
+	PRINTF("%s", config_description[line][0]);
 	set_cursor(HINT_ROW + (3 * LINE_SPACE), HINT_COL);
-	PRINTF("%s", config_description[cursor_line][1]);
+	PRINTF("%s", config_description[line][1]);
 
 	reset_cursor();
 }
 
+/**
+* @brief Process key input.
+*
+* Key pressed is treated differently based on line selected.
+*
+* @param str             string to process
+* @param key_pressed     character input
+* @param arrow_pressed	 arrow key pressed
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void process_ui_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (cursor_line) {
@@ -590,6 +777,20 @@ void process_ui_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 	}
 }
 
+/**
+* @brief Reads color in RGB format.
+*
+* Brackets and commas in color format are skipped on input.
+*
+* @param str             string to process
+* @param key_pressed     character input
+* @param arrow_pressed	 arrow key pressed
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void read_color_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (key_pressed) {
@@ -633,6 +834,20 @@ void read_color_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 
 }
 
+/**
+* @brief Read step mode type input.
+*
+* Arrow keys are read to change mode.
+*
+* @param str             string to process
+* @param key_pressed     character input
+* @param arrow_pressed	 arrow key pressed
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (arrow_pressed) {
@@ -642,7 +857,7 @@ void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 				set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[cursor_line]) + CONFIG_COL + 2);
 				PRINTF("%s", step_mode_name[step_mode]);
 				clear_next(8);
-				change_line();
+				change_cursor_line(cursor_line);
 				config_edited = true;
 			}
 			break;
@@ -653,7 +868,7 @@ void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 				set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[cursor_line]) + CONFIG_COL + 2);
 				PRINTF("%s", step_mode_name[step_mode]);
 				clear_next(8);
-				change_line();
+				change_cursor_line(cursor_line);
 				config_edited = true;
 			}
 			break;
@@ -662,6 +877,20 @@ void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 	}
 }
 
+/**
+* @brief Text editor interface.
+*
+* Read number through text editor interface.
+*
+* @param str             string to process
+* @param key_pressed     character input
+* @param arrow_pressed	 arrow key pressed
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (arrow_pressed) {
@@ -710,7 +939,19 @@ void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed
 	}
 }
 
-
+/**
+* @brief Convert color in string to binary.
+*
+* Parse color from (R, G, B) formated string.
+*
+* @param color_str	source string to process.
+* @return result 	Converted color output.
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 uint8_t parse_color(char* color_str)
 {
 	uint8_t result = 0;
@@ -726,6 +967,19 @@ uint8_t parse_color(char* color_str)
 	return result;
 }
 
+/**
+* @brief 8-bit color to formated string.
+*
+* Converts *bit color to (R, G, B) formated string.
+*
+* @param color	 source color.
+* @param str_out destination string.
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void color_to_str(uint8_t color, char* str_out)
 {
 	char number_str[2];
@@ -738,6 +992,19 @@ void color_to_str(uint8_t color, char* str_out)
 	str_out[BLUE_OFFSET] = number_str[0];
 }
 
+/**
+* @brief Set cursor to a position.
+*
+* Set cursor position to a position relative to home position.
+*
+* @param row	line number from top.
+* @param col 	columns from left.
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void set_cursor(uint16_t row, uint16_t col)
 {
 	char row_str[4], col_str[4];
@@ -750,6 +1017,18 @@ void set_cursor(uint16_t row, uint16_t col)
 	PRINTF("%c", coordinates[5]);
 }
 
+/**
+* @brief Moves cursor left.
+*
+* Moves cursor a number of times in a single shot.
+*
+* @param no_of_times 	times to move left
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void move_cursor_left(uint16_t no_of_times)
 {
 	char no_of_times_str[4];
@@ -760,6 +1039,20 @@ void move_cursor_left(uint16_t no_of_times)
 	}
 }
 
+/**
+* @brief Insert character to string.
+*
+* Insert character in a position between a string.
+*
+* @param str	 	 string to process
+* @param position	 position to insert
+* @param input		 character to be inserted
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void insert(char* str, uint16_t position, char input)
 {
 	int16_t length = strlen(str) - 1;
@@ -770,6 +1063,20 @@ void insert(char* str, uint16_t position, char input)
 	str[position] = input;
 }
 
+/**
+* @brief Delete character from string.
+*
+* Delete character from a position between a string.
+*
+* @param str	 	 string to process
+* @param position	 position to insert
+* @param input		 character to be inserted
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void delete(char* str, uint16_t position)
 {
 	int16_t length = strlen(str) - 1;
@@ -779,6 +1086,19 @@ void delete(char* str, uint16_t position)
 	str[position] = '\0';
 }
 
+/**
+* @brief Draw ASCII square.
+*
+* Uses ASCII characters to draw a doted square.
+*
+* @param length  	Length of the square.
+* @param breadth    Breadth of the square.
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void draw_dotted_square(uint16_t length, uint16_t breadth)
 {
 	/* Print line to right */
@@ -809,6 +1129,20 @@ void draw_dotted_square(uint16_t length, uint16_t breadth)
 	}
 }
 
+/**
+* @brief Draw ASCII square.
+*
+* Uses ASCII characters to draw a square.
+*
+* @param length  	Length of the square.
+* @param breadth    Breadth of the square.
+*
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void draw_square(uint16_t length, uint16_t breadth)
 {
 	/* Print line to right */
@@ -839,6 +1173,18 @@ void draw_square(uint16_t length, uint16_t breadth)
 	}
 }
 
+/**
+* @brief Clear characters.
+*
+* Clear remaining characters number of characters.
+*
+* @param length		number of characters to clear.
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void clear_next(uint8_t length)
 {
 	for (uint8_t len = 0; len < length; len++) {

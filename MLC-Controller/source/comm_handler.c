@@ -20,17 +20,14 @@
 #include "fsl_port.h"
 #include "fsl_debug_console.h"
 
-
 /*******************************************
 * Const and Macro Defines
 *******************************************/
-
-
+// none
 
 /***********************************
 * Typedefs and Enum Declarations
 ***********************************/
-
 /*Slave Data Structure*/
  typedef struct {
 	uint8_t slave_status[2];
@@ -38,31 +35,29 @@
 	led_config_type rx_data;
 } slave_data;
 
-
-
-
 /***********************************
 * External Variable Declarations
 ***********************************/
-
 // none
 
 /***********************************
 * Const Declarations
 ***********************************/
-
-static QueueHandle_t communication_queue;
-static QueueHandle_t device_status_queue;
-static QueueHandle_t pattern_control_queue;
 // none
-
 
 /***********************************
 * Public Variables
 ***********************************/
-
 uint8_t rx_buff[I2C_DATA_LENGTH];
 uint8_t slave_ID[2] ={0xBE,0xEF};
+
+/***********************************
+* Private Variables
+***********************************/
+static QueueHandle_t communication_queue;
+static QueueHandle_t device_status_queue;
+static QueueHandle_t pattern_control_queue;
+
 static _Bool g_SlaveCompletionFlag;
 static _Bool config_receiveflag 	= false;
 static _Bool command_receiveflag 	= false;
@@ -70,17 +65,9 @@ static _Bool master_readflag 		= false;
 static _Bool master_writeflag 		= false;
 static _Bool ismaster 				= false;
 
-
-/***********************************
-* Private Variables
-***********************************/
-
-// none
-
 /***********************************
 * Private Prototypes
 ***********************************/
-
 void i2c_pin_config(void);
 void i2c_slave_init(void);
 status_t I2C_write(uint32_t offset,uint8_t add_size,uint8_t* data,uint8_t data_size);
@@ -433,8 +420,9 @@ void communication_task(void* pvParameter)
 					if(config.control_mode!=temp_config.control_mode){
 						/*Control Byte Only*/
 						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));
+						xQueueSend(pattern_control_queue,&config,100);
 						if(xfer_status!=kStatus_Success){
-							xQueueSend(pattern_control_queue,&config,0);
+
 //							//PRINTF("CONTROL BIT FAILED");
 						}
 						//temp_config.control_mode = config.control_mode;
@@ -442,16 +430,17 @@ void communication_task(void* pvParameter)
 						/*HANDSHAKE + Send Full Config*/
 						if(I2C_Handshake()){
 							device_status = true;
-							xQueueSend(device_status_queue,&device_status,0);
+							xQueueSend(device_status_queue,&device_status,100);
 							config.control_mode=NOP;
 							xfer_status = I2C_write(CONFIG_OFFSET, 1, (uint8_t*)&config, sizeof(led_config_type));
 							if (xfer_status !=kStatus_Success) {
 //								//PRINTF("\r\nTransfer Failed To Slave Config");
 							}
-							xQueueSend(pattern_control_queue,&config,0);
+							xQueueSend(pattern_control_queue,&config,100);
 						} else{
 							device_status = false;
 							xQueueSend(device_status_queue,&device_status,0);
+							xQueueSend(pattern_control_queue,&config,100);
 						}
 				}
 			}else{
@@ -484,21 +473,29 @@ void communication_task(void* pvParameter)
 								break;
 								case 0x04:
 									config = *(led_config_type *)&rx_buff[1];
-//									//PRINTF("%d",config.start_color[0]);
-//									//PRINTF("CONFIG DETECTED");
 									temp_config.stop_color[0] = config.start_color[0];
 									config.start_color[0]=config.stop_color[0];
 									config.stop_color[0]=temp_config.stop_color[0];
+									if(config.step_mode==AUTO_UP){
+										config.step_mode=AUTO_DOWN;
+									} else if(config.step_mode ==AUTO_DOWN){
+										config.step_mode = AUTO_UP;
+									}
 									xQueueSend(pattern_control_queue,&config,0);
 									xQueueSend(communication_queue,&config,0);
 									g_SlaveCompletionFlag=false;
 									break;
 								case 0x11:
 									config.control_mode = rx_buff[1];
+									if(config.step_mode==MANUAL){
+										if(config.control_mode==UP){
+											config.control_mode=DOWN;
+										} else if(config.control_mode==DOWN){
+											config.control_mode=UP;
+										}
+									}
 									xQueueSend(pattern_control_queue,&config,0);
 									xQueueSend(communication_queue,&config,0);
-//									//PRINTF("%d",config.control_mode);
-//									//PRINTF("CONTROl DETECTED");
 									g_SlaveCompletionFlag=false;
 									break;
 								default:

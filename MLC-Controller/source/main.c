@@ -15,25 +15,21 @@
 /***********************************
  * Typedefs and Enum Declarations
  ***********************************/
-
 // none
 
 /***********************************
  * External Variable Declarations
  ***********************************/
-
 // none
 
 /***********************************
  * Const Declarations
  ***********************************/
-
 // none
 
 /***********************************
  * Public Variables
  ***********************************/
-
 // none
 
 /***********************************
@@ -48,11 +44,9 @@ static QueueHandle_t device_status_queue;
 static QueueHandle_t pattern_status_queue;
 static QueueHandle_t pattern_control_queue;
 
-
 /***********************************
  * Private Prototypes
  ***********************************/
-
 // none
 
 /***********************************
@@ -72,13 +66,13 @@ int main(void) {
     communication_queue = xQueueCreate(2, sizeof(led_config_type));
     device_status_queue = xQueueCreate(1, sizeof(_Bool));
     pattern_status_queue = xQueueCreate(1, sizeof(uint8_t));
-    pattern_control_queue=xQueueCreate(2,sizeof(led_config_type));
+    pattern_control_queue=xQueueCreate(2, sizeof(led_config_type));
 
     /* task creations */
     xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, &master_mode, 4, NULL);
-    xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE+200, NULL,4 ,&pattern_executor_handler);
+  //  xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE+200, NULL,4 ,&pattern_executor_handler);
     xTaskCreate(ui_handler_task, "UI Task", configMINIMAL_STACK_SIZE + 100, &master_mode, 4, &ui_handler_handle);
-    xTimerCreate("Check Control Timer", TIMER_PERIOD, pdTRUE, 0, check_control_mode);
+    xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE+200, NULL,4 ,&pattern_executor_handler);
 
     /* start scheduler */
     vTaskStartScheduler();

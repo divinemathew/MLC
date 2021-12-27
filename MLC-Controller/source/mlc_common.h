@@ -31,24 +31,11 @@
 /***********************************
 * Const and Macro Defines
 ***********************************/
-
 // none
 
 /***********************************
 * Typedefs and Enum Declarations
 ***********************************/
-typedef struct {
-	uint8_t start_color[3];
-	uint8_t stop_color[3];
-	uint8_t step_value;
-	uint8_t step_mode;
-	uint8_t no_of_cycles;
-	uint16_t color_change_rate;
-	uint16_t refresh_rate;
-	uint8_t color_scheme;
-	uint8_t control_mode;
-} led_config_type;
-
 typedef enum{
 	CONTINOUS,
 	FIXED
@@ -95,16 +82,29 @@ typedef enum {
 	UP,
 	DOWN
 } control_mode_enum;
+
+typedef struct {
+	uint8_t start_color[3];
+	uint8_t stop_color[3];
+	uint8_t step_value;
+	uint8_t step_mode;
+	uint8_t no_of_cycles;
+	uint16_t color_change_rate;
+	uint16_t refresh_rate;
+	uint8_t color_scheme;
+	uint8_t control_mode;
+} led_config_type;
+
+typedef int16_t color_type;
+
 /***********************************
 * Const Declarations
 ***********************************/
-
 // none
 
 /***********************************
 * Variable Declarations
 ***********************************/
-
 // none
 
 /***********************************
