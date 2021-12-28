@@ -91,6 +91,8 @@ _Bool config_is_valid(void);
 void print_connection_status(void);
 void reset_cursor(void);
 void animate_arrow(void);
+void decode_config(void);
+
 
 
 /***********************************
@@ -125,6 +127,9 @@ void ui_handler_task(void* board_is_master)
 		run_master_ui();
 	} else {
 		run_slave_ui();
+	}
+
+	while (1) {
 	}
 }
 
@@ -192,16 +197,18 @@ void draw_ui(void)
 
 	/* Draw hind */
 	if (master_mode) {
-		set_cursor(HINT_ROW - (7 * LINE_SPACE), HINT_COL - 1);
-		draw_dotted_square(SMALL_SQUARE_SIZE, 10);
-		set_cursor(HINT_ROW - (6 * LINE_SPACE), HINT_COL);
+		set_cursor(HINT_ROW - (8 * LINE_SPACE), HINT_COL - 1);
+		draw_dotted_square(SMALL_SQUARE_SIZE, 11);
+		set_cursor(HINT_ROW - (7 * LINE_SPACE), HINT_COL);
 		PRINTF("ENTER - Apply changes");
-		set_cursor(HINT_ROW - (5 * LINE_SPACE), HINT_COL);
+		set_cursor(HINT_ROW - (6 * LINE_SPACE), HINT_COL);
 		PRINTF("S - Stop");
-		set_cursor(HINT_ROW - (4 * LINE_SPACE), HINT_COL);
+		set_cursor(HINT_ROW - (5 * LINE_SPACE), HINT_COL);
 		PRINTF("P - Pause");
-		set_cursor(HINT_ROW - (3 * LINE_SPACE), HINT_COL);
+		set_cursor(HINT_ROW - (4 * LINE_SPACE), HINT_COL);
 		PRINTF("A/D - Prev/Next color");
+		set_cursor(HINT_ROW - (3 * LINE_SPACE), HINT_COL);
+		PRINTF("C - Cancel changes");
 		set_cursor(HINT_ROW - (1 * LINE_SPACE), HINT_COL);
 		PRINTF("DESCRIPTION");
 		set_cursor(HINT_ROW + (2 * LINE_SPACE), HINT_COL);
@@ -233,7 +240,7 @@ void update_status_task(void* pvParameter)
 	uint8_t tick_count = 0;
 
 	while(1) {
-		xSemaphoreTake(console, 100);
+		xSemaphoreTake(console, 1000);
 		tick_count++;
 
 		char pattern_position_str[POSITION_STR_LEN + 4] = PATTERN_POS_STR;
@@ -372,7 +379,7 @@ void run_master_ui(void)
 	_Bool pattern_running = false;
 
 	/* print master home screen */
-	xSemaphoreTake(console, 0);
+	xSemaphoreTake(console, 100);
 	draw_ui();
 	print_config_values();
 
@@ -380,7 +387,7 @@ void run_master_ui(void)
 	for ( ; ; ) {
 		xSemaphoreGive(console);
 		key_pressed = GETCHAR();
-		xSemaphoreTake(console, 100);
+		xSemaphoreTake(console, 1000);
 		switch (key_pressed) {
 
 			/* if read an escape sequence, check which escape sequence is recieved */
@@ -467,10 +474,16 @@ void run_master_ui(void)
 				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 				break;
 
-			case 'R' :
-			case 'r' :
-				draw_ui();
+			case 'C' :
+			case 'c' :
+				PRINTF("%s", hide_cursor);
+				//PRINTF("%s", clear);
+				decode_config();
+				//draw_ui();
+				print_pattern_state(configuration.control_mode);
 				print_config_values();
+				change_cursor_line(cursor_line);
+				PRINTF("%s", show_cursor);
 				break;
 
 			default :
@@ -497,15 +510,6 @@ _Bool config_is_valid(void)
 {
 	_Bool config_valid = true;
 
-	/* parse structure data from string */
-	configuration.start_color[0] = parse_color(config_value_str[START_COLOR]);
-	configuration.stop_color[0] = parse_color(config_value_str[STOP_COLOR]);
-	configuration.step_value = atoi(config_value_str[STEP_VALUE]);
-	configuration.step_mode = (uint8_t)step_mode;
-	configuration.no_of_cycles = atoi(config_value_str[NUMBER_OF_CYCLES]);
-	configuration.color_change_rate = atoi(config_value_str[COLOR_CHANGE_RATE]);
-	configuration.refresh_rate = atoi(config_value_str[REFRESH_RATE]);
-
 	/* check if color is greater than minimum value */
 	config_valid &= config_value_str[START_COLOR][1] >= '0';
 	config_valid &= config_value_str[START_COLOR][4] >= '0';
@@ -523,16 +527,26 @@ _Bool config_is_valid(void)
 	config_valid &= config_value_str[STOP_COLOR][7] <= '3';
 
 	/* check if values are greater than minimum */
-	config_valid &= configuration.step_value >= MIN_STEP_VALUE;
-	config_valid &= configuration.no_of_cycles >= MIN_NO_OF_CYCLES;
-	config_valid &= configuration.color_change_rate >= MIN_CHANGE_RATE;
-	config_valid &= configuration.refresh_rate >= MIN_REFRESH_RATE;
+	config_valid &= atoi(config_value_str[STEP_VALUE]) >= MIN_STEP_VALUE;
+	config_valid &= atoi(config_value_str[NUMBER_OF_CYCLES]) >= MIN_NO_OF_CYCLES;
+	config_valid &= atoi(config_value_str[COLOR_CHANGE_RATE]) >= MIN_CHANGE_RATE;
+	config_valid &= atoi(config_value_str[REFRESH_RATE]) >= MIN_REFRESH_RATE;
 
 	/* check if values are less than maximum */
-	config_valid &= configuration.step_value <= MAX_STEP_VALUE;
-	config_valid &= configuration.no_of_cycles <= MAX_NO_OF_CYCLES;
-	config_valid &= configuration.color_change_rate <= MAX_CHANGE_RATE;
-	config_valid &= configuration.refresh_rate <= MAX_REFRESH_RATE;
+	config_valid &= atoi(config_value_str[STEP_VALUE]) <= MAX_STEP_VALUE;
+	config_valid &= atoi(config_value_str[NUMBER_OF_CYCLES]) <= MAX_NO_OF_CYCLES;
+	config_valid &= atoi(config_value_str[COLOR_CHANGE_RATE]) <= MAX_CHANGE_RATE;
+	config_valid &= atoi(config_value_str[REFRESH_RATE]) <= MAX_REFRESH_RATE;
+
+	if (config_valid) {
+		configuration.start_color[0] = parse_color(config_value_str[START_COLOR]);
+		configuration.stop_color[0] = parse_color(config_value_str[STOP_COLOR]);
+		configuration.step_value = atoi(config_value_str[STEP_VALUE]);
+		configuration.step_mode = (uint8_t)step_mode;
+		configuration.no_of_cycles = atoi(config_value_str[NUMBER_OF_CYCLES]);
+		configuration.color_change_rate = atoi(config_value_str[COLOR_CHANGE_RATE]);
+		configuration.refresh_rate = atoi(config_value_str[REFRESH_RATE]);
+	}
 
 	return config_valid;
 }
@@ -560,17 +574,7 @@ void run_slave_ui(void)
 		if (xQueueReceive(communication_queue, &configuration, 0)) {
 			if (configuration.control_mode == NOP) {
 
-				/* decode configurations to ASCII and print */
-				color_to_str(configuration.start_color[0], config_value_str[START_COLOR]);
-				color_to_str(configuration.stop_color[0], config_value_str[STOP_COLOR]);
-				itoa(configuration.step_value, config_value_str[STEP_VALUE], 10);
-				if (configuration.step_mode <= MAX_MODE_VALUE) {
-					strcpy(config_value_str[STEP_MODE], step_mode_name[configuration.step_mode]);
-					step_mode = configuration.step_mode;
-				}
-				itoa(configuration.no_of_cycles, config_value_str[NUMBER_OF_CYCLES], 10);
-				itoa(configuration.color_change_rate, config_value_str[COLOR_CHANGE_RATE], 10);
-				itoa(configuration.refresh_rate, config_value_str[REFRESH_RATE], 10);
+				decode_config();
 				xSemaphoreTake(console, 100);
 				print_config_values();
 				xSemaphoreGive(console);
@@ -586,6 +590,33 @@ void run_slave_ui(void)
 			taskYIELD();
 		}
 	}
+}
+
+/**
+* @brief Decode config data to string form.
+*
+* Converts config data to string config data to be able to print
+* to the console.
+*
+* @param control	control input received
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
+void decode_config(void)
+{
+	color_to_str(configuration.start_color[0], config_value_str[START_COLOR]);
+	color_to_str(configuration.stop_color[0], config_value_str[STOP_COLOR]);
+	itoa(configuration.step_value, config_value_str[STEP_VALUE], 10);
+	if (configuration.step_mode <= MAX_MODE_VALUE) {
+		strcpy(config_value_str[STEP_MODE], step_mode_name[configuration.step_mode]);
+		step_mode = configuration.step_mode;
+	}
+	itoa(configuration.no_of_cycles, config_value_str[NUMBER_OF_CYCLES], 10);
+	itoa(configuration.color_change_rate, config_value_str[COLOR_CHANGE_RATE], 10);
+	itoa(configuration.refresh_rate, config_value_str[REFRESH_RATE], 10);
 }
 
 /**

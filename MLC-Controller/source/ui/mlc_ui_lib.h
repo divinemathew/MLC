@@ -24,7 +24,7 @@
 #define SMALL_SQUARE_SIZE   21
 #define LINE_SPACE          1
 
-#define CONFIG_ROW            19
+#define CONFIG_ROW            20
 #define CONFIG_COL            5
 #define CONFIG_ROW_COL        (CONFIG_ROW, CONFIG_COL)
 #define STATUS_ROW            12
@@ -33,7 +33,7 @@
 #define PATTERN_STATE_ROW_COL (10, 49)
 #define HEAD_1_ROW_COL        (3, 25)
 #define HEAD_2_ROW_COL        (4, 25)
-#define HINT_ROW              22
+#define HINT_ROW              24
 #define HINT_COL              49
 #define POSITION_STR_LEN 	  21
 
@@ -107,7 +107,7 @@ const char config_description[][2][50] = {{" (R, G, B)       ", " (0,0,0) - (7,7
 										  {" PWM frequency   ", " 1 - 9999         "}
 										};
 
-const char step_mode_name[][CONFIG_VALUE_LENGTH] = {"",
+const char step_mode_name[][CONFIG_VALUE_LENGTH] = {"0.Mode X",
 													"1.Auto Up",
 													"2.Auto Down",
 													"3.Auto Up-Down",

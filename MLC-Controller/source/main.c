@@ -66,13 +66,13 @@ int main(void) {
     communication_queue = xQueueCreate(2, sizeof(led_config_type));
     device_status_queue = xQueueCreate(1, sizeof(_Bool));
     pattern_status_queue = xQueueCreate(1, sizeof(uint8_t));
-    pattern_control_queue=xQueueCreate(2, sizeof(led_config_type));
+    pattern_control_queue = xQueueCreate(2, sizeof(led_config_type));
 
     /* task creations */
-    xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 200, &master_mode, 4, NULL);
+    xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 300, &master_mode, 4, NULL);
   //  xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE+200, NULL,4 ,&pattern_executor_handler);
-    xTaskCreate(ui_handler_task, "UI Task", configMINIMAL_STACK_SIZE + 100, &master_mode, 4, &ui_handler_handle);
-    xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE+200, NULL,4 ,&pattern_executor_handler);
+    xTaskCreate(ui_handler_task, "UI Task", configMINIMAL_STACK_SIZE + 300, &master_mode, 4, &ui_handler_handle);
+    xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE + 300, NULL,4 ,&pattern_executor_handler);
 
     /* start scheduler */
     vTaskStartScheduler();
@@ -106,4 +106,13 @@ QueueHandle_t get_queue_handle(queue_enum queue_requested)
 			queue = NULL;
 	}
 	return queue;
+}
+
+void pattern_task(void * pcpara)
+{
+	while (1) {
+		taskYIELD();
+
+	}
+
 }

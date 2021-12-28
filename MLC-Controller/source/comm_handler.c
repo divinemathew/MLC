@@ -182,7 +182,7 @@ void i2c_master_init(void)
 *
 *
 * @param offset	-	Offset address of the slave
-* @param *data	-	Data pointer 
+* @param *data	-	Data pointer
 * @param add_size -	Size of Address
 * @param data_size -Size of Data
 *
@@ -258,7 +258,7 @@ _Bool I2C_Handshake(void)
 *
 *
 * @param base	-	Base Address of I2C
-* @param xfer	-	Handle for I2C Transfer 
+* @param xfer	-	Handle for I2C Transfer
 * @param userData -	Userdata
 *
 * @note
@@ -408,6 +408,7 @@ void communication_task(void* pvParameter)
 	led_config_type temp_config;
 	temp_config.control_mode=0;
 	_Bool device_status;
+	xfer_data xferdata;
 	communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
 	device_status_queue = get_queue_handle(DEVICE_STATUS_QUEUE);
 	pattern_control_queue = get_queue_handle(PATTERN_CONTROL_QUEUE);
@@ -431,8 +432,17 @@ void communication_task(void* pvParameter)
 						if(I2C_Handshake()){
 							device_status = true;
 							xQueueSend(device_status_queue,&device_status,100);
+							xferdata.start_color[0]		=	config.start_color[0];
+							xferdata.stop_color[0]		=	config.stop_color[0];
+							xferdata.step_value			= 	config.step_value;
+							xferdata.step_mode			=	config.step_mode;
+							xferdata.no_of_cycles 		=	config.no_of_cycles;
+							xferdata.color_change_rate	=	config.color_change_rate;
+							xferdata.refresh_rate 		=	config.refresh_rate;
+							xferdata.color_scheme		=	config.color_scheme;
 							config.control_mode=NOP;
-							xfer_status = I2C_write(CONFIG_OFFSET, 1, (uint8_t*)&config, sizeof(led_config_type));
+//							xfer_status = I2C_write(CONFIG_OFFSET, 1, (uint8_t*)&config, sizeof(led_config_type));
+							xfer_status = I2C_write(CONFIG_OFFSET, 1, (uint8_t*)&xferdata, sizeof(xferdata));
 							if (xfer_status !=kStatus_Success) {
 //								//PRINTF("\r\nTransfer Failed To Slave Config");
 							}
@@ -472,15 +482,24 @@ void communication_task(void* pvParameter)
 								g_SlaveCompletionFlag=false;
 								break;
 								case 0x04:
-									config = *(led_config_type *)&rx_buff[1];
-									temp_config.stop_color[0] = config.start_color[0];
-									config.start_color[0]=config.stop_color[0];
-									config.stop_color[0]=temp_config.stop_color[0];
-									if(config.step_mode==AUTO_UP){
-										config.step_mode=AUTO_DOWN;
-									} else if(config.step_mode ==AUTO_DOWN){
-										config.step_mode = AUTO_UP;
+									xferdata = *(xfer_data *)&rx_buff[1];
+									temp_config.stop_color[0] = xferdata.start_color[0];
+									xferdata.start_color[0]=xferdata.stop_color[0];
+									xferdata.stop_color[0]=temp_config.stop_color[0];
+									if(xferdata.step_mode==AUTO_UP){
+										xferdata.step_mode=AUTO_DOWN;
+									} else if(xferdata.step_mode ==AUTO_DOWN){
+										xferdata.step_mode = AUTO_UP;
 									}
+									config.start_color[0]		=	xferdata.start_color[0];
+									config.stop_color[0]		=	xferdata.stop_color[0];
+									config.step_value			= 	xferdata.step_value;
+									config.step_mode			=	xferdata.step_mode;
+									config.no_of_cycles 		=	xferdata.no_of_cycles;
+									config.color_change_rate	=	xferdata.color_change_rate;
+									config.refresh_rate 		=	xferdata.refresh_rate;
+									config.color_scheme			=	xferdata.color_scheme;
+									config.control_mode=NOP;
 									xQueueSend(pattern_control_queue,&config,0);
 									xQueueSend(communication_queue,&config,0);
 									g_SlaveCompletionFlag=false;
