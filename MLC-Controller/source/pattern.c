@@ -270,8 +270,8 @@ void pwm_init(ftm_chnl_t channel, uint16_t frequency)
 void set_color(color_type color)
 {
 	color = (uint8_t)color;
-  FTM_UpdatePwmDutycycle(MLC_FTM, FTM_RED_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_RED(color));
-  FTM_UpdatePwmDutycycle(MLC_FTM, FTM_GREEN_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_GREEN(color));
-  FTM_UpdatePwmDutycycle(MLC_FTM, FTM_BLUE_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_BLUE(color));
-  FTM_SetSoftwareTrigger(MLC_FTM, true);
+	FTM_UpdatePwmDutycycle(MLC_FTM, FTM_RED_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_RED(color));
+  	FTM_UpdatePwmDutycycle(MLC_FTM, FTM_GREEN_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_GREEN(color));
+  	FTM_UpdatePwmDutycycle(MLC_FTM, FTM_BLUE_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_BLUE(color));
+  	FTM_SetSoftwareTrigger(MLC_FTM, true);
 }
