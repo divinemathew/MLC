@@ -39,7 +39,7 @@
 
 #define MIN_STEP_VALUE   1
 #define MAX_STEP_VALUE   255
-#define MIN_NO_OF_CYCLES 1
+#define MIN_NO_OF_CYCLES 0
 #define MAX_NO_OF_CYCLES 100
 #define MIN_CHANGE_RATE  1
 #define MAX_CHANGE_RATE  500

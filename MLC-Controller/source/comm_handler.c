@@ -483,9 +483,9 @@ void communication_task(void* pvParameter)
 								break;
 								case 0x04:
 									xferdata = *(xfer_data *)&rx_buff[1];
-									temp_config.stop_color[0] = xferdata.start_color[0];
-									xferdata.start_color[0]=xferdata.stop_color[0];
-									xferdata.stop_color[0]=temp_config.stop_color[0];
+//									temp_config.stop_color[0] = xferdata.start_color[0];
+//									xferdata.start_color[0]=xferdata.stop_color[0];
+//									xferdata.stop_color[0]=temp_config.stop_color[0];
 									if(xferdata.step_mode==AUTO_UP){
 										xferdata.step_mode=AUTO_DOWN;
 									} else if(xferdata.step_mode ==AUTO_DOWN){

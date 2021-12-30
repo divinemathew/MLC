@@ -38,7 +38,7 @@
 static _Bool master_mode = true;
 
 TaskHandle_t ui_handler_handle;
-TaskHandle_t pattern_executor_handler;
+TaskHandle_t pattern_executor_handle;
 static QueueHandle_t communication_queue;
 static QueueHandle_t device_status_queue;
 static QueueHandle_t pattern_status_queue;
@@ -70,9 +70,8 @@ int main(void) {
 
     /* task creations */
     xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 300, &master_mode, 4, NULL);
-  //  xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE+200, NULL,4 ,&pattern_executor_handler);
     xTaskCreate(ui_handler_task, "UI Task", configMINIMAL_STACK_SIZE + 300, &master_mode, 4, &ui_handler_handle);
-    xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE + 300, NULL,4 ,&pattern_executor_handler);
+    xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE + 300, &master_mode,4 ,&pattern_executor_handle);
 
     /* start scheduler */
     vTaskStartScheduler();
