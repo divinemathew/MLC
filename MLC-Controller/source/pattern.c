@@ -68,7 +68,7 @@ static QueueHandle_t pattern_control_queue;
 void color_timer(TimerHandle_t xTimer);
 color_type next_color(color_type);
 color_type previous_color(color_type);
-color_type start_color(void);
+void init_color(color_type* color);
 void set_pwm_frequency(uint16_t frequency);
 void set_color(color_type color);
 void pwm_init(ftm_chnl_t channel, uint16_t frequency);
@@ -91,7 +91,7 @@ void pattern_executor_task(void* master_mode)
 	config.step_mode = AUTO_UP;
 	config.no_of_cycles = 1;
 	config.refresh_rate = 100;
-	config.color_scheme = EIGHT_BIT_TRUE_COLOR;
+	config.color_scheme = 0;
 	config.control_mode = 0;
 
 	led_config_type received_config;
@@ -116,7 +116,7 @@ void pattern_executor_task(void* master_mode)
 				switch (received_config.control_mode) {
 					case START :
 						count = 0;
-						current_color = start_color();
+						init_color(&current_color);
 						set_color(current_color);
 						xQueueOverwrite(pattern_status_queue, (uint8_t *)&current_color);
 						if (config.step_mode != MANUAL) {
@@ -190,45 +190,41 @@ void color_timer(TimerHandle_t timer1)
 }
 
 /**
-* @brief Switch UI to master_mode.
+* @brief initialize pattern.
 *
-* Non returning function for performing master mode UI operations.
+* Initialize start conditions of the pattern.
 *
-* @param
+* @param colot	  Pointer to the color to update.
 *
 * @note
 *
 * Revision History:
 * - 171221 KAR: Creation Date
 */
-color_type start_color(void)
+void init_color(color_type* color)
 {
-	color_type color_out = 0;
-
 	switch (config.step_mode) {
 		case AUTO_UP :
 			going_up = true;
-			color_out = min_color;
+			*color = min_color;
 			break;
 
 		case AUTO_DOWN :
 			going_up = false;
-			color_out = max_color;
+			*color = max_color;
 			break;
 
 		case AUTO_UP_DOWN :
 		case MANUAL:
 			if (master) {
 				going_up = true;
-				color_out = min_color;
+				*color = min_color;
 			} else {
 				going_up = false;
-				color_out = max_color;
+				*color = max_color;
 			}
 			break;
 	}
-
-	return color_out;
 }
 
 color_type next_color(color_type color)
