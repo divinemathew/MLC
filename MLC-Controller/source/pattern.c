@@ -1,6 +1,13 @@
 /**
- * @file    MLC-Controller.c
- * @brief   Application entry point.
+ * @file pattern_executer.c
+ * @brief Multi-color LED controller Pattern executer block
+ *
+ * This program configures the LED and runs the color pattern.
+ *
+ * @note
+ *
+ * Revision History:
+ *	- 091221 KAR : Creation Date
  */
 
 #include "mlc_common.h"
@@ -68,7 +75,7 @@ static QueueHandle_t pattern_control_queue;
 void color_timer(TimerHandle_t xTimer);
 color_type next_color(color_type);
 color_type previous_color(color_type);
-color_type start_color(void);
+void init_pattern(color_type* color);
 void set_pwm_frequency(uint16_t frequency);
 void set_color(color_type color);
 void pwm_init(ftm_chnl_t channel, uint16_t frequency);
@@ -76,6 +83,19 @@ void pwm_init(ftm_chnl_t channel, uint16_t frequency);
 /***********************************
  * Public Functions
  ***********************************/
+/**
+* @brief Main task of pattern executer.
+*
+* Receives configuration from other tasks and controls the
+* color change timer.
+*
+* @param master_mode	  Task parameter to check MLC mode.
+*
+* @note
+*
+* Revision History:
+* - 201221 KAR: Creation Date
+*/
 void pattern_executor_task(void* master_mode)
 {
 	color_change_timer = xTimerCreate("Color change timer", 100, pdTRUE, NULL, color_timer);
@@ -91,7 +111,7 @@ void pattern_executor_task(void* master_mode)
 	config.step_mode = AUTO_UP;
 	config.no_of_cycles = 1;
 	config.refresh_rate = 100;
-	config.color_scheme = EIGHT_BIT_TRUE_COLOR;
+	config.color_scheme = 0;
 	config.control_mode = 0;
 
 	led_config_type received_config;
@@ -116,16 +136,15 @@ void pattern_executor_task(void* master_mode)
 				switch (received_config.control_mode) {
 					case START :
 						count = 0;
-						current_color = start_color();
+						init_pattern(&current_color);
 						set_color(current_color);
-						if (going_up) {
-							current_color = next_color(current_color);
-						} else {
-							current_color = previous_color(current_color);
-
-						}
 						xQueueOverwrite(pattern_status_queue, (uint8_t *)&current_color);
 						if (config.step_mode != MANUAL) {
+							if (going_up) {
+								current_color = next_color(current_color);
+							} else {
+								current_color = previous_color(current_color);
+							}
 							xTimerReset(color_change_timer, 0);
 							xTimerStart(color_change_timer, 0);
 						}
@@ -174,6 +193,18 @@ void pattern_executor_task(void* master_mode)
 	}
 }
 
+/**
+* @brief Change color timer event.
+*
+* Updates the color of LED to the next color of the pattern
+* currently running.
+*
+*
+* @note
+*
+* Revision History:
+* - 201221 KAR: Creation Date
+*/
 void color_timer(TimerHandle_t timer1)
 {
 	if (count < config.no_of_cycles || config.no_of_cycles == 0) {
@@ -190,42 +221,65 @@ void color_timer(TimerHandle_t timer1)
 	}
 }
 
-color_type start_color(void)
+/**
+* @brief initialize pattern.
+*
+* Initialize start conditions of the pattern.
+*
+* @param color	  Pointer to the color to update.
+*
+* @note
+*
+* Revision History:
+* - 201221 KAR: Creation Date
+*/
+void init_pattern(color_type* color)
 {
-	color_type color_out = 0;
-
 	switch (config.step_mode) {
 		case AUTO_UP :
 			going_up = true;
-			color_out = min_color;
+			*color = min_color;
 			break;
 
 		case AUTO_DOWN :
 			going_up = false;
-			color_out = max_color;
+			*color = max_color;
 			break;
 
 		case AUTO_UP_DOWN :
 		case MANUAL:
 			if (master) {
 				going_up = true;
-				color_out = min_color;
+				*color = min_color;
 			} else {
 				going_up = false;
-				color_out = max_color;
+				*color = max_color;
 			}
 			break;
 	}
-
-	return color_out;
 }
 
+/**
+* @brief Increment color.
+*
+* Adds step value to the color keeping within the range of
+* start and stop color.
+*
+* @param color	  Color to add step to.
+* @return color	  Incremented color.
+*
+* @note
+*
+* Revision History:
+* - 201221 KAR: Creation Date
+*/
 color_type next_color(color_type color)
 {
 	color += config.step_value;
 
 	if (color == max_color + config.step_value) {
 		if (config.step_mode == AUTO_UP_DOWN) {
+			color = max_color;
 			going_up = false;
 			if (!master) {
 				count++;
@@ -241,12 +295,27 @@ color_type next_color(color_type color)
 	return color;
 }
 
+/**
+* @brief Decrement color.
+*
+* Subtracts step value to the color keeping within the range of
+* start and stop color.
+*
+* @param color	  Color to take away step from.
+* @return color	  Decremented color.
+*
+* @note
+*
+* Revision History:
+* - 201221 KAR: Creation Date
+*/
 color_type previous_color(color_type color)
 {
 	color -= config.step_value;
 
 	if (color == min_color - config.step_value) {
 		if (config.step_mode == AUTO_UP_DOWN) {
+			color = min_color;
 			going_up = true;
 			if (master) {
 				count++;
@@ -262,6 +331,18 @@ color_type previous_color(color_type color)
 	return color;
 }
 
+/**
+* @brief Updates PWM frequency.
+*
+* Updates frequency of all the three PWM channels with the passed value.
+*
+* @param frequency	  PWM frequency in Hz.
+*
+* @note
+*
+* Revision History:
+* - 201221 KAR: Creation Date
+*/
 void set_pwm_frequency(uint16_t frequency)
 {
     ftm_config_t ftm_config;
@@ -281,6 +362,19 @@ void set_pwm_frequency(uint16_t frequency)
 	FTM_StartTimer(MLC_FTM, kFTM_SystemClock);
 }
 
+/**
+* @brief Sets frequency of a channel.
+*
+* Updates frequency of a PWM channel.
+*
+* @param channel	  FTM channel to set frequency.
+* @param frequency	  PWM Frequency in Hz.
+*
+* @note
+*
+* Revision History:
+* - 201221 KAR: Creation Date
+*/
 void pwm_init(ftm_chnl_t channel, uint16_t frequency)
 {
 	ftm_chnl_pwm_signal_param_t pwm_config;
@@ -295,6 +389,18 @@ void pwm_init(ftm_chnl_t channel, uint16_t frequency)
 	FTM_SetupPwm(MLC_FTM, &pwm_config, 1, kFTM_EdgeAlignedPwm, frequency, FTM_SOURCE_CLOCK);
 }
 
+/**
+* @brief Update LED color.
+*
+* Sets the color of the led currently glowing;
+*
+* @param color	  Color to glow.
+*
+* @note
+*
+* Revision History:
+* - 201221 KAR: Creation Date
+*/
 void set_color(color_type color)
 {
 	color = (uint8_t)color;

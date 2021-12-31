@@ -89,6 +89,15 @@
 ***********************************/
 typedef int16_t color_type;
 
+typedef enum{
+	CONTINOUS,
+	FIXED
+} no_of_cycles_enum;
+
+typedef enum{
+	EIGHT_BIT_TRUE_COLOR,
+	TWENTY_FOUR_BIT_RGB_SCHEME
+} color_scheme_enum;
 
 
 /***********************************

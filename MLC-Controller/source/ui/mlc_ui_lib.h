@@ -16,57 +16,61 @@
 /***********************************
 * Const and Macro Defines
 ***********************************/
-#define STATUS_UPDATE_TICKS 10
-#define ANIMATE_TICKS 10
-#define MAX_INPUT_LENGTH    5
-#define CONFIG_VALUE_LENGTH 15
-#define TITLE_SQUARE_SIZE   20
-#define SMALL_SQUARE_SIZE   21
-#define LINE_SPACE          1
+#define STATUS_UPDATE_TICKS     10
+#define ANIMATE_TICKS 		    10
+#define MAX_INPUT_LENGTH        5
+#define CONFIG_VALUE_LENGTH     15
+#define TITLE_SQUARE_SIZE       20
+#define SMALL_SQUARE_SIZE       21
+#define LINE_SPACE         	    1
 
-#define CONFIG_ROW            20
-#define CONFIG_COL            5
-#define CONFIG_ROW_COL        (CONFIG_ROW, CONFIG_COL)
-#define STATUS_ROW            12
-#define STATUS_COL            5
-#define STATUS_ROW_COL        (STATUS_ROW, STATUS_COL)
-#define PATTERN_STATE_ROW_COL (10, 49)
-#define HEAD_1_ROW_COL        (3, 25)
-#define HEAD_2_ROW_COL        (4, 25)
-#define HINT_ROW              24
-#define HINT_COL              49
-#define POSITION_STR_LEN 	  21
+#define CONFIG_ROW              20
+#define CONFIG_COL              5
+#define CONFIG_ROW_COL          (CONFIG_ROW, CONFIG_COL)
+#define STATUS_ROW              12
+#define STATUS_COL              5
+#define STATUS_ROW_COL          (STATUS_ROW, STATUS_COL)
+#define PATTERN_STATE_ROW_COL   (10, 49)
+#define HEAD_1_ROW_COL          (3, 25)
+#define HEAD_2_ROW_COL          (4, 25)
+#define HINT_ROW                24
+#define HINT_COL                49
 
-#define MIN_STEP_VALUE   1
-#define MAX_STEP_VALUE   255
-#define MIN_NO_OF_CYCLES 0
-#define MAX_NO_OF_CYCLES 100
-#define MIN_CHANGE_RATE  1
-#define MAX_CHANGE_RATE  500
-#define MIN_REFRESH_RATE 1
-#define MAX_REFRESH_RATE 9999
-#define MAX_MODE_VALUE   4
+#define MIN_STEP_VALUE	  	    1
+#define MAX_STEP_VALUE   	    255
+#define MIN_NO_OF_CYCLES	    0
+#define MAX_NO_OF_CYCLES 	    100
+#define MIN_CHANGE_RATE  	    1
+#define MAX_CHANGE_RATE  	    500
+#define MIN_REFRESH_RATE 	    1
+#define MAX_REFRESH_RATE        9999
+#define MAX_MODE_VALUE   	    4
 
-#define MAX_UP          0
-#define MAX_DOWN        6
-#define MODE_LINE       3
-#define STATUS_COUNT    3
-#define BACKSPACE       '\b'
-#define SEQUENCE        '\e'
-#define RED_OFFSET      1
-#define GREEN_OFFSET    4
-#define BLUE_OFFSET     7
-#define QUEUE_SEND_WAIT 200 * 20
-#define PATTERN_POS_CHAR 'v'
-#define PATTERN_POS_STR "[_____________________]"
+#define MAX_UP          		0
+#define MAX_DOWN        		6
+#define MODE_LINE       		3
+#define STATUS_COUNT    		3
+#define BACKSPACE       		'\b'
+#define SEQUENCE        		'\e'
+#define RED_OFFSET      		1
+#define GREEN_OFFSET    		4
+#define BLUE_OFFSET     		7
+#define QUEUE_SEND_WAIT			200 * 20
+#define CONSOLE_SEMAPHORE_WAIT  1000
 
-const char up[4] = 			"\e[A"; 		//{0x1B, 0x5B, 'A'};
-const char down[4] =		"\e[B"; 		//{0x1B, 0x5B, 'B'};
-const char right[4] =		"\e[C"; 		//{0x1B, 0x5B, 'C'};
-const char left[4] = 		"\e[D"; 		//{0x1B, 0x5B, 'D'};
-const char clear_end[4] = 	"\e[K"; 		//{0x1B, 0x5B, 0x4B};
-const char clear[5] = 		"\e[2J"; 		//{0x1B, 0x5B, 0x32, 0x4A};
-const char coordinates[7] = "\e[1;1H"; 		//{0x1B, 0x5B, 0x39, 0x3B, 0x39, 0x48};
+#define POSITION_STR_LEN 	 	21
+#define PATTERN_POS_CHAR 		'v'
+#define PATTERN_POS_STR 		"[_____________________]"
+//#define PATTERN_POS_CHAR 		'|'
+//#define PATTERN_POS_STR 		"[---------------------]"
+
+const char up[4] = 			"\e[A"; 		/* {0x1B, 0x5B, 'A'}; */
+const char down[4] =		"\e[B"; 		/* {0x1B, 0x5B, 'B'}; */
+const char right[4] =		"\e[C"; 		/* {0x1B, 0x5B, 'C'}; */
+const char left[4] = 		"\e[D"; 		/* {0x1B, 0x5B, 'D'}; */
+const char clear_end[4] = 	"\e[K"; 		/* {0x1B, 0x5B, 0x4B}; */
+const char clear[5] = 		"\e[2J"; 		/* {0x1B, 0x5B, 0x32, 0x4A}; */
+const char coordinates[7] = "\e[1;1H"; 		/* {0x1B, 0x5B, 0x39, 0x3B, 0x39, 0x48}; */
 const char hide_cursor[7] = "\e[?25l";
 const char show_cursor[7] = "\e[?25h";
 const char save_cursor[4] = "\e[s";

@@ -62,7 +62,7 @@ static _Bool g_SlaveCompletionFlag;
 static _Bool config_receiveflag 	= false;
 static _Bool command_receiveflag 	= false;
 static _Bool master_readflag 		= false;
-static _Bool master_writeflag 		= false;
+static _Bool master_writeflag 	    = false;
 static _Bool ismaster 				= false;
 
 /***********************************
@@ -202,7 +202,7 @@ status_t I2C_write(uint32_t offset,uint8_t add_size,uint8_t* data,uint8_t data_s
 	masterXfer.dataSize=data_size;
 	masterXfer.subaddress=offset;
 	masterXfer.subaddressSize= add_size;
-	i2c_writestatus = I2C_MasterTransferBlocking(I2C0_BASE, &masterXfer);
+	i2c_writestatus = I2C_MasterTransferBlocking(I2C0, &masterXfer);
 	//PRINTF("\r\n%d",i2c_writestatus);
 	return i2c_writestatus;
 }
@@ -218,7 +218,7 @@ status_t I2C_read(uint32_t offset,uint8_t add_size,uint8_t* data,uint8_t data_si
 	masterXfer.dataSize=data_size;
 	masterXfer.subaddress=offset;
 	masterXfer.subaddressSize= add_size;
-	i2c_readstatus = I2C_MasterTransferBlocking(I2C0_BASE, &masterXfer);
+	i2c_readstatus = I2C_MasterTransferBlocking(I2C0, &masterXfer);
 	return i2c_readstatus;
 }
 
@@ -247,6 +247,8 @@ _Bool I2C_Handshake(void)
 //		//PRINTF("MAIN ERROR");
 		return false;
 	}
+
+	return false;
 }
 
 
@@ -427,7 +429,7 @@ void communication_task(void* pvParameter)
 //							//PRINTF("CONTROL BIT FAILED");
 						}
 						//temp_config.control_mode = config.control_mode;
-					} else{
+					}else{
 						/*HANDSHAKE + Send Full Config*/
 						if(I2C_Handshake()){
 							device_status = true;
@@ -447,15 +449,15 @@ void communication_task(void* pvParameter)
 //								//PRINTF("\r\nTransfer Failed To Slave Config");
 							}
 							xQueueSend(pattern_control_queue,&config,100);
-						} else{
+						}else{
 							device_status = false;
 							xQueueSend(device_status_queue,&device_status,0);
 							xQueueSend(pattern_control_queue,&config,100);
 						}
+					}
+				} else {
+					taskYIELD();
 				}
-			}else{
-				taskYIELD();
-			}
 			}
 			break;
 		case false:

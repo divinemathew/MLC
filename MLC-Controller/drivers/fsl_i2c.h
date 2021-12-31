@@ -27,7 +27,7 @@
 
 /*! @brief Retry times for waiting flag. */
 #ifndef I2C_RETRY_TIMES
-#define I2C_RETRY_TIMES 1000U /* Define to zero means keep waiting until the flag is assert/deassert. */
+#define I2C_RETRY_TIMES 1200000U /* Define to zero means keep waiting until the flag is assert/deassert. */
 #endif
 
 /*! @brief Mater Fast ack control, control if master needs to manually write ack, this is used to

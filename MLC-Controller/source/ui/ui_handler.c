@@ -55,11 +55,11 @@ static _Bool anime_frame_1 = true;
 static char current_color_str[10] = "(0, 0, 0)";
 static char config_value_str[][CONFIG_VALUE_LENGTH] = {"(0, 0, 0)",
 													   "(7, 7, 3)",
-													   "1",
+													   "3",
 													   "1.Auto_Up",
+													   "10",
 													   "1",
-													   "1",
-													   "1"
+													   "100"
 													   };
 static step_mode_enum step_mode = AUTO_UP;
 static uint8_t cursor_line = 0;
@@ -93,21 +93,32 @@ void reset_cursor(void);
 void animate_arrow(void);
 void decode_config(void);
 
-
-
 /***********************************
  * Public Functions
  ***********************************/
+
+/**
+* @brief Main task of UI handler.
+*
+* Reads user inputs and
+*
+* @param board_is_master	  Task parameter to check MLC mode.
+*
+* @note
+*
+* Revision History:
+* - 201221 KAR: Creation Date
+*/
 void ui_handler_task(void* board_is_master)
 {
 	/* initialize queues and create status task */
 	communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
 	device_status_queue = get_queue_handle(DEVICE_STATUS_QUEUE);
 	pattern_status_queue = get_queue_handle(PATTERN_STATUS_QUEUE);
-    xTaskCreate(update_status_task, "UTask", configMINIMAL_STACK_SIZE + 100, NULL, 4, NULL);
+    xTaskCreate(update_status_task, "Animation task", configMINIMAL_STACK_SIZE + 100, NULL, 4, NULL);
 
     /* create semaphore to use console */
-	console = xSemaphoreCreateBinary();
+	console = xSemaphoreCreateMutex();
 	xSemaphoreGive(console);
 
 	/* initialize configuration with defaults */
@@ -122,14 +133,13 @@ void ui_handler_task(void* board_is_master)
     configuration.control_mode = NOP;
 
     /* Clear screen and start UI */
-	PRINTF("%s", clear);
-	if (master_mode) {
-		run_master_ui();
-	} else {
-		run_slave_ui();
-	}
-
-	while (1) {
+    while (1) {
+		PRINTF("%s", clear);
+		if (master_mode) {
+			run_master_ui();
+		} else {
+			run_slave_ui();
+		}
 	}
 }
 
@@ -185,6 +195,7 @@ void draw_ui(void)
 	pattern_position_str[1] = PATTERN_POS_CHAR;
 	PRINTF("%s", pattern_position_str);
 
+	/* Draw pattern state */
 	set_cursor PATTERN_STATE_ROW_COL;
 	PRINTF("%s%s", left, up);
 	draw_dotted_square(SMALL_SQUARE_SIZE, 1);
@@ -195,7 +206,7 @@ void draw_ui(void)
 	draw_dotted_square(SMALL_SQUARE_SIZE, 1);
 	PRINTF("    %s", config_title);
 
-	/* Draw hind */
+	/* Draw hind box */
 	if (master_mode) {
 		set_cursor(HINT_ROW - (8 * LINE_SPACE), HINT_COL - 1);
 		draw_dotted_square(SMALL_SQUARE_SIZE, 11);
@@ -236,19 +247,17 @@ void update_status_task(void* pvParameter)
 	TickType_t xLastWakeTime;
 	xLastWakeTime = xTaskGetTickCount();
 	uint8_t current_color = 0;
-
 	uint8_t tick_count = 0;
 
 	while(1) {
-		xSemaphoreTake(console, 1000);
-		tick_count++;
-
+		/* Take console semaphore and */
+		xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 		char pattern_position_str[POSITION_STR_LEN + 4] = PATTERN_POS_STR;
+		tick_count++;
 
 		print_connection_status();
 
-		/* Redraw current color */
-
+		/* Read current color from pattern executer */
 		if (xQueueReceive(pattern_status_queue, &current_color, 0)) {
 			PRINTF("%s", hide_cursor);
 
@@ -258,7 +267,7 @@ void update_status_task(void* pvParameter)
 				PRINTF("%s", current_color_str);
 			}
 
-			/* Redraw pattern position */
+			/* Redraw color position slider */
 			set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
 			if (current_color < 255) {
 				pattern_position_str[((current_color * POSITION_STR_LEN) / 255) + 1] = PATTERN_POS_CHAR;
@@ -268,7 +277,7 @@ void update_status_task(void* pvParameter)
 			PRINTF("%s", pattern_position_str);
 		}
 
-		/* Next frame of arrow animation */
+		/* Next frame of arrow animation and redraw current color */
 		if (tick_count >= ANIMATE_TICKS) {
 			animate_arrow();
 			set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
@@ -379,7 +388,7 @@ void run_master_ui(void)
 	_Bool pattern_running = false;
 
 	/* print master home screen */
-	xSemaphoreTake(console, 100);
+	xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 	draw_ui();
 	print_config_values();
 
@@ -387,7 +396,7 @@ void run_master_ui(void)
 	for ( ; ; ) {
 		xSemaphoreGive(console);
 		key_pressed = GETCHAR();
-		xSemaphoreTake(console, 1000);
+		xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 		switch (key_pressed) {
 
 			/* if read an escape sequence, check which escape sequence is recieved */
@@ -476,14 +485,13 @@ void run_master_ui(void)
 
 			case 'C' :
 			case 'c' :
-				PRINTF("%s", hide_cursor);
-				//PRINTF("%s", clear);
-				decode_config();
-				//draw_ui();
-				print_pattern_state(configuration.control_mode);
-				print_config_values();
-				change_cursor_line(cursor_line);
-				PRINTF("%s", show_cursor);
+				if (config_edited) {
+					config_edited = false;
+					decode_config();
+					print_pattern_state(configuration.control_mode);
+					print_config_values();
+					change_cursor_line(cursor_line);
+				}
 				break;
 
 			default :
@@ -565,7 +573,7 @@ _Bool config_is_valid(void)
 */
 void run_slave_ui(void)
 {
-	xSemaphoreTake(console, 100);
+	xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 	draw_ui();
 	print_config_values();
 
@@ -575,13 +583,13 @@ void run_slave_ui(void)
 			if (configuration.control_mode == NOP) {
 
 				decode_config();
-				xSemaphoreTake(console, 100);
+				xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 				print_config_values();
 				xSemaphoreGive(console);
 			} else {
 
 				/* display control received */
-				xSemaphoreTake(console, 100);
+				xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 				print_connection_status();
 				print_pattern_state(configuration.control_mode);
 				xSemaphoreGive(console);
@@ -708,6 +716,7 @@ void print_connection_status(void)
 */
 void print_config_values(void)
 {
+	PRINTF("%s", hide_cursor);
 	for (uint16_t line = 0; line <= MAX_DOWN; line++) {
 		set_cursor(CONFIG_ROW + (line * LINE_SPACE), CONFIG_COL);
 		PRINTF("%s", config_name[line]);

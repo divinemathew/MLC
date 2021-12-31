@@ -52,7 +52,6 @@ static QueueHandle_t pattern_control_queue;
 /***********************************
  * Public Functions
  ***********************************/
-
 int main(void) {
 
 	/* Init board hardware. */
@@ -69,8 +68,8 @@ int main(void) {
     pattern_control_queue = xQueueCreate(2, sizeof(led_config_type));
 
     /* task creations */
-    xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 300, &master_mode, 4, NULL);
     xTaskCreate(ui_handler_task, "UI Task", configMINIMAL_STACK_SIZE + 300, &master_mode, 4, &ui_handler_handle);
+    xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 300, &master_mode, 4, NULL);
     xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE + 300, &master_mode,4 ,&pattern_executor_handle);
 
     /* start scheduler */
@@ -105,13 +104,4 @@ QueueHandle_t get_queue_handle(queue_enum queue_requested)
 			queue = NULL;
 	}
 	return queue;
-}
-
-void pattern_task(void * pcpara)
-{
-	while (1) {
-		taskYIELD();
-
-	}
-
 }
