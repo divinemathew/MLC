@@ -49,11 +49,11 @@ static QueueHandle_t device_status_queue;
 static QueueHandle_t pattern_status_queue;
 
 static _Bool master_mode = true;
-static _Bool device_connected = true;
+static _Bool device_connected = false;
 static _Bool config_edited = true;
+static _Bool changes_cancelled = false;
 static _Bool anime_frame_1 = true;
 static _Bool pattern_running = false;
-static char current_color_str[10] = "(0, 0, 0)";
 static char config_value_str[][CONFIG_VALUE_LENGTH] = {"(0, 0, 0)",
 													   "(7, 7, 3)",
 													   "3",
@@ -63,6 +63,7 @@ static char config_value_str[][CONFIG_VALUE_LENGTH] = {"(0, 0, 0)",
 													   "100"
 													   };
 static step_mode_enum step_mode = AUTO_UP;
+static uint8_t current_color = 0;
 static uint8_t cursor_line = 0;
 static uint8_t cursor_pos;
 static uint8_t value_length;
@@ -83,6 +84,8 @@ void change_cursor_line(uint8_t line);
 void run_master_ui(void);
 void run_slave_ui(void);
 void print_configurations(void);
+void draw_color_slider(uint8_t color);
+void draw_current_color(uint8_t color);
 void draw_ui(void);
 void update_status_task(void* pvParameter);
 uint8_t parse_color(char* color_str);
@@ -152,8 +155,6 @@ void ui_handler_task(void* board_is_master)
 */
 void draw_ui(void)
 {
-	char pattern_position_str[POSITION_STR_LEN + 4] = PATTERN_POS_STR;
-
 	PRINTF("%s", hide_cursor);
 
 	/* Draw title */
@@ -184,11 +185,8 @@ void draw_ui(void)
 	}
 	set_cursor(STATUS_ROW + (0 * LINE_SPACE), strlen(status_name[0]) + STATUS_COL);
 	PRINTF("%s", "Waiting...");
-	set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
-	PRINTF("%s", "(0, 0, 0)");
-	set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
-	pattern_position_str[1] = PATTERN_POS_CHAR;
-	PRINTF("%s", pattern_position_str);
+	draw_current_color(current_color);
+	draw_color_slider(current_color);
 
 	/* Draw pattern state */
 	set_cursor PATTERN_STATE_ROW_COL;
@@ -241,16 +239,13 @@ void update_status_task(void* pvParameter)
 {
 	TickType_t xLastWakeTime;
 	xLastWakeTime = xTaskGetTickCount();
-	uint8_t current_color = 0;
 	int16_t pattern_state;
 	uint8_t delay_count = 0;
 	_Bool color_changed = false;
 
 	while(1) {
-		/* Take console semaphore and */
 		xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
-		char pattern_position_str[POSITION_STR_LEN + 4] = PATTERN_POS_STR;
-		
+
 		/* Increment animation delay counter.
 		 * Check and print connection status */
 		delay_count++;
@@ -265,23 +260,11 @@ void update_status_task(void* pvParameter)
 			/* if pattern has not stopped, display current color.
 			 * Else display pattern stopped */
 			if (pattern_state != -1) {
-				PRINTF("%s", hide_cursor);
 				current_color = (uint8_t)pattern_state;
-				if (step_mode == MANUAL) {
-					set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
-					color_to_str(current_color, current_color_str);
-					PRINTF("%s", current_color_str);
+				if (configuration.step_mode == MANUAL) {
+					draw_current_color(current_color);
 				}
-
-				/* Redraw color position slider */
-				set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
-				if (current_color < 255) {
-					pattern_position_str[((current_color * POSITION_STR_LEN) / 255) + 1] = PATTERN_POS_CHAR;
-				} else {
-					pattern_position_str[POSITION_STR_LEN] = PATTERN_POS_CHAR;
-				}
-				PRINTF("%s", pattern_position_str);
-				reset_cursor();
+				draw_color_slider(current_color);
 			} else {
 
 				/* print pattern stopped */
@@ -294,11 +277,12 @@ void update_status_task(void* pvParameter)
 		/* Next frame of arrow animation and redraw current color */
 		if (delay_count >= ANIMATE_TICKS) {
 			delay_count = 0;
-			animate_arrow();
+			if (master_mode) {
+				animate_arrow();
+			}
+			changes_cancelled = false;
 			if (color_changed) {
-				set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
-				color_to_str(current_color, current_color_str);
-				PRINTF("%s", current_color_str);
+				draw_current_color(current_color);
 				color_changed = false;
 			}
 			reset_cursor();
@@ -307,6 +291,54 @@ void update_status_task(void* pvParameter)
 		xSemaphoreGive(console);
 		vTaskDelayUntil(&xLastWakeTime, STATUS_UPDATE_TICKS);
 	}
+}
+
+/**
+* @brief Refresh color slider.
+*
+* Redraws color slider.
+*
+* @param color color to display.
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
+void draw_color_slider(uint8_t color)
+{
+	char pattern_position_str[POSITION_STR_LEN + 4] = PATTERN_POS_STR;
+
+	PRINTF("%s", hide_cursor);
+	set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
+	if (color < 255) {
+		pattern_position_str[((color * POSITION_STR_LEN) / 255) + 1] = PATTERN_POS_CHAR;
+	} else {
+		pattern_position_str[POSITION_STR_LEN] = PATTERN_POS_CHAR;
+	}
+	PRINTF("%s", pattern_position_str);
+	reset_cursor();
+}
+
+/**
+* @brief Refresh current color.
+*
+* Redraws current color.
+*
+* @param color color to display.
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
+void draw_current_color(uint8_t color)
+{
+	char current_color_str[10] = "(0, 0, 0)";
+
+	PRINTF("%s", hide_cursor);
+	set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
+	color_to_str(color, current_color_str);
+	PRINTF("%s", current_color_str);
+	reset_cursor();
 }
 
 /**
@@ -328,7 +360,7 @@ void animate_arrow(void)
 
 	PRINTF("%s", hide_cursor);
 	set_cursor(CONFIG_ROW + (MODE_LINE * LINE_SPACE), strlen(config_name[MODE_LINE]) + CONFIG_COL);
-	if (anime_frame_1 && master_mode) {
+	if (anime_frame_1) {
 		if (step_mode > AUTO_UP) {
 			PRINTF("< ");
 		} else {
@@ -343,7 +375,7 @@ void animate_arrow(void)
 			PRINTF("  ");
 		}
 		anime_frame_1 = false;
-	} else if (master_mode){
+	} else {
 		if (step_mode > AUTO_UP) {
 			PRINTF(" <");
 		} else {
@@ -503,9 +535,11 @@ void run_master_ui(void)
 			case 'C' :
 			case 'c' :
 				/* redraw configuration with last applied configuration. */
-				if (config_edited) {
-					config_edited = false;
+				if (!changes_cancelled) {
+					changes_cancelled = true;
 					draw_ui();
+					draw_current_color(current_color);
+					draw_color_slider(current_color);
 					decode_config();
 					print_pattern_state(configuration.control_mode);
 					print_configurations();

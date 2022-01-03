@@ -114,6 +114,7 @@ void pattern_executor_task(void* master_mode)
 	color_change_timer = xTimerCreate("Color change timer", 100, pdTRUE, NULL, color_timer);
 	pattern_control_queue = get_queue_handle(PATTERN_CONTROL_QUEUE);
 	pattern_status_queue = get_queue_handle(PATTERN_STATUS_QUEUE);
+	set_pwm_frequency(100000 / config.refresh_rate);
 	xTimerStop(color_change_timer, 0);
 
 	while (1) {
