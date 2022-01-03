@@ -52,6 +52,7 @@ static _Bool master_mode = true;
 static _Bool device_connected = true;
 static _Bool config_edited = true;
 static _Bool anime_frame_1 = true;
+static _Bool pattern_running = false;
 static char current_color_str[10] = "(0, 0, 0)";
 static char config_value_str[][CONFIG_VALUE_LENGTH] = {"(0, 0, 0)",
 													   "(7, 7, 3)",
@@ -81,14 +82,14 @@ void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed);
 void change_cursor_line(uint8_t line);
 void run_master_ui(void);
 void run_slave_ui(void);
-void print_config_values(void);
+void print_configurations(void);
 void draw_ui(void);
 void update_status_task(void* pvParameter);
 uint8_t parse_color(char* color_str);
 void color_to_str(uint8_t color, char* str_out);
 void print_pattern_state(uint8_t control);
-_Bool config_is_valid(void);
-void print_connection_status(void);
+_Bool encode_config(void);
+void print_connection_status(_Bool status);
 void reset_cursor(void);
 void animate_arrow(void);
 void decode_config(void);
@@ -100,7 +101,7 @@ void decode_config(void);
 /**
 * @brief Main task of UI handler.
 *
-* Reads user inputs and
+* Initialize configuration and start master or slave UI.
 *
 * @param board_is_master	  Task parameter to check MLC mode.
 *
@@ -123,13 +124,7 @@ void ui_handler_task(void* board_is_master)
 
 	/* initialize configuration with defaults */
     master_mode = *((_Bool*)board_is_master);
-    configuration.start_color[0] = parse_color(config_value_str[START_COLOR]);
-	configuration.stop_color[0] = parse_color(config_value_str[STOP_COLOR]);
-	configuration.step_value = atoi(config_value_str[STEP_VALUE]);
-	configuration.step_mode = (uint8_t)step_mode;
-	configuration.no_of_cycles = atoi(config_value_str[NUMBER_OF_CYCLES]);
-	configuration.color_change_rate = atoi(config_value_str[COLOR_CHANGE_RATE]);
-	configuration.refresh_rate = atoi(config_value_str[REFRESH_RATE]);
+    encode_config();
     configuration.control_mode = NOP;
 
     /* Clear screen and start UI */
@@ -247,46 +242,68 @@ void update_status_task(void* pvParameter)
 	TickType_t xLastWakeTime;
 	xLastWakeTime = xTaskGetTickCount();
 	uint8_t current_color = 0;
-	uint8_t tick_count = 0;
+	int16_t pattern_state;
+	uint8_t delay_count = 0;
+	_Bool color_changed = false;
 
 	while(1) {
 		/* Take console semaphore and */
 		xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 		char pattern_position_str[POSITION_STR_LEN + 4] = PATTERN_POS_STR;
-		tick_count++;
+		
+		/* Increment animation delay counter.
+		 * Check and print connection status */
+		delay_count++;
+		if (xQueueReceive(device_status_queue, &device_connected, 0)) {
+			print_connection_status(device_connected);
+		}
 
-		print_connection_status();
+		/* Read and print current color from pattern executer */
+		if (xQueueReceive(pattern_status_queue, &pattern_state, 0) == pdPASS) {
+			color_changed = true;
 
-		/* Read current color from pattern executer */
-		if (xQueueReceive(pattern_status_queue, &current_color, 0)) {
-			PRINTF("%s", hide_cursor);
+			/* if pattern has not stopped, display current color.
+			 * Else display pattern stopped */
+			if (pattern_state != -1) {
+				PRINTF("%s", hide_cursor);
+				current_color = (uint8_t)pattern_state;
+				if (step_mode == MANUAL) {
+					set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
+					color_to_str(current_color, current_color_str);
+					PRINTF("%s", current_color_str);
+				}
 
-			if (step_mode == MANUAL) {
-				set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
-				color_to_str(current_color, current_color_str);
-				PRINTF("%s", current_color_str);
-			}
-
-			/* Redraw color position slider */
-			set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
-			if (current_color < 255) {
-				pattern_position_str[((current_color * POSITION_STR_LEN) / 255) + 1] = PATTERN_POS_CHAR;
+				/* Redraw color position slider */
+				set_cursor(STATUS_ROW + (2 * LINE_SPACE), strlen(status_name[2]) + STATUS_COL);
+				if (current_color < 255) {
+					pattern_position_str[((current_color * POSITION_STR_LEN) / 255) + 1] = PATTERN_POS_CHAR;
+				} else {
+					pattern_position_str[POSITION_STR_LEN] = PATTERN_POS_CHAR;
+				}
+				PRINTF("%s", pattern_position_str);
+				reset_cursor();
 			} else {
-				pattern_position_str[POSITION_STR_LEN] = PATTERN_POS_CHAR;
+
+				/* print pattern stopped */
+				configuration.control_mode = STOP;
+				print_pattern_state(configuration.control_mode);
+				pattern_running = false;
 			}
-			PRINTF("%s", pattern_position_str);
 		}
 
 		/* Next frame of arrow animation and redraw current color */
-		if (tick_count >= ANIMATE_TICKS) {
+		if (delay_count >= ANIMATE_TICKS) {
+			delay_count = 0;
 			animate_arrow();
-			set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
-			color_to_str(current_color, current_color_str);
-			PRINTF("%s", current_color_str);
-			tick_count = 0;
+			if (color_changed) {
+				set_cursor(STATUS_ROW + (1 * LINE_SPACE), strlen(status_name[1]) + STATUS_COL);
+				color_to_str(current_color, current_color_str);
+				PRINTF("%s", current_color_str);
+				color_changed = false;
+			}
+			reset_cursor();
 		}
 
-		reset_cursor();
 		xSemaphoreGive(console);
 		vTaskDelayUntil(&xLastWakeTime, STATUS_UPDATE_TICKS);
 	}
@@ -385,12 +402,11 @@ void run_master_ui(void)
 {
 	char key_pressed;
 	_Bool pattern_paused = false;
-	_Bool pattern_running = false;
 
 	/* print master home screen */
 	xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 	draw_ui();
-	print_config_values();
+	print_configurations();
 
 	change_cursor_line(cursor_line);
 	for ( ; ; ) {
@@ -399,7 +415,7 @@ void run_master_ui(void)
 		xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 		switch (key_pressed) {
 
-			/* if read an escape sequence, check which escape sequence is recieved */
+			/* if read an escape sequence, check which escape sequence is received */
 			case '\e' :
 				key_pressed = GETCHAR();
 				if (key_pressed == '[') {
@@ -429,7 +445,6 @@ void run_master_ui(void)
 				/* send STOP command */
 				configuration.control_mode = STOP;
 				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
-				print_connection_status();
 				print_pattern_state(configuration.control_mode);
 				pattern_running = false;
 				break;
@@ -437,21 +452,24 @@ void run_master_ui(void)
 			case 'p' :
 			case 'P' :
 				/* send toggled PAUSE/RESUME command */
-				if (pattern_paused && pattern_running) {
-					configuration.control_mode = RESUME;
-					pattern_paused = false;
-				} else if (pattern_running) {
-					configuration.control_mode = PAUSE;
-					pattern_paused = true;
+				if (pattern_running) {
+					if (pattern_paused) {
+						configuration.control_mode = RESUME;
+						pattern_paused = false;
+					} else {
+						configuration.control_mode = PAUSE;
+						pattern_paused = true;
+					}
+					xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
+					print_pattern_state(configuration.control_mode);
 				}
-				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
-				print_connection_status();
-				print_pattern_state(configuration.control_mode);
 				break;
 
 			case '\r' :
-				/* send configuration and send START command */
-				if (config_is_valid()) {
+				/* send configuration and send START command.
+				 * The structure is send twice. Configuration is received if
+				 * the control command is zero and vice versa */
+				if (encode_config()) {
 					if (config_edited) {
 						configuration.control_mode = NOP;
 						xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
@@ -460,7 +478,6 @@ void run_master_ui(void)
 					configuration.control_mode = START;
 					xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 					pattern_running = true;
-					print_connection_status();
 					print_pattern_state(configuration.control_mode);
 					taskYIELD();
 				} else {
@@ -478,18 +495,21 @@ void run_master_ui(void)
 
 			case 'D' :
 			case 'd' :
-				/* send DOWN command */
+				/* send UP command */
 				configuration.control_mode = UP;
 				xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 				break;
 
 			case 'C' :
 			case 'c' :
+				/* redraw configuration with last applied configuration. */
 				if (config_edited) {
 					config_edited = false;
+					draw_ui();
 					decode_config();
 					print_pattern_state(configuration.control_mode);
-					print_config_values();
+					print_configurations();
+					print_connection_status(device_connected);
 					change_cursor_line(cursor_line);
 				}
 				break;
@@ -514,7 +534,7 @@ void run_master_ui(void)
 * Revision History:
 * - 171221 ATG: Creation Date
 */
-_Bool config_is_valid(void)
+_Bool encode_config(void)
 {
 	_Bool config_valid = true;
 
@@ -546,6 +566,7 @@ _Bool config_is_valid(void)
 	config_valid &= atoi(config_value_str[COLOR_CHANGE_RATE]) <= MAX_CHANGE_RATE;
 	config_valid &= atoi(config_value_str[REFRESH_RATE]) <= MAX_REFRESH_RATE;
 
+	/* convert screen configuration strings to configuration structure */
 	if (config_valid) {
 		configuration.start_color[0] = parse_color(config_value_str[START_COLOR]);
 		configuration.stop_color[0] = parse_color(config_value_str[STOP_COLOR]);
@@ -575,22 +596,23 @@ void run_slave_ui(void)
 {
 	xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 	draw_ui();
-	print_config_values();
+	print_configurations();
 
 	xSemaphoreGive(console);
 	for (; ;) {
 		if (xQueueReceive(communication_queue, &configuration, 0)) {
+
+			/* Check if configuration or control is received and update console */
 			if (configuration.control_mode == NOP) {
 
 				decode_config();
 				xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
-				print_config_values();
+				print_configurations();
 				xSemaphoreGive(console);
 			} else {
 
 				/* display control received */
 				xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
-				print_connection_status();
 				print_pattern_state(configuration.control_mode);
 				xSemaphoreGive(console);
 			}
@@ -676,30 +698,30 @@ void print_pattern_state(uint8_t control)
 * Revision History:
 * - 171221 ATG: Creation Date
 */
-void print_connection_status(void)
+void print_connection_status(_Bool status)
 {
-	if (xQueueReceive(device_status_queue, &device_connected, 0)) {
-		PRINTF("%s", hide_cursor);
-		set_cursor(STATUS_ROW + (0 * LINE_SPACE), strlen(status_name[0]) + STATUS_COL);
-		if (master_mode) {
-			if (device_connected) {
-				PRINTF("%s", status_const_str[0][1]);
-				clear_next(5);
-			} else {
-				PRINTF("%s", status_const_str[0][0]);
-				clear_next(5);
-			}
+	PRINTF("%s", hide_cursor);
+	set_cursor(STATUS_ROW + (0 * LINE_SPACE), strlen(status_name[0]) + STATUS_COL);
+
+	/* Print status corresponding to master or slave. */
+	if (master_mode) {
+		if (status) {
+			PRINTF("%s", status_const_str[0][1]);
+			clear_next(5);
 		} else {
-			if (device_connected) {
-				PRINTF("%s", status_const_str[1][1]);
-				clear_next(5);
-			} else {
-				PRINTF("%s", status_const_str[1][0]);
-				clear_next(5);
-			}
+			PRINTF("%s", status_const_str[0][0]);
+			clear_next(5);
 		}
-		reset_cursor();
+	} else {
+		if (status) {
+			PRINTF("%s", status_const_str[1][1]);
+			clear_next(5);
+		} else {
+			PRINTF("%s", status_const_str[1][0]);
+			clear_next(5);
+		}
 	}
+	reset_cursor();
 }
 
 /**
@@ -714,7 +736,7 @@ void print_connection_status(void)
 * Revision History:
 * - 171221 ATG: Creation Date
 */
-void print_config_values(void)
+void print_configurations(void)
 {
 	PRINTF("%s", hide_cursor);
 	for (uint16_t line = 0; line <= MAX_DOWN; line++) {
@@ -749,7 +771,7 @@ void change_cursor_line(uint8_t line)
 {
 	switch (line) {
 
-		/* color data type */
+		/* Lines for color type input */
 		case START_COLOR :
 		case STOP_COLOR :
 			cursor_pos = 1;
@@ -757,7 +779,7 @@ void change_cursor_line(uint8_t line)
 			set_cursor(CONFIG_ROW + (line * LINE_SPACE), strlen(config_name[line]) + 1 + CONFIG_COL);
 			break;
 
-		/* number data type */
+		/* Lines for number input */
 		case STEP_VALUE:
 		case NUMBER_OF_CYCLES :
 		case COLOR_CHANGE_RATE :
@@ -767,7 +789,7 @@ void change_cursor_line(uint8_t line)
 			set_cursor(CONFIG_ROW + (line * LINE_SPACE), strlen(config_name[line]) + value_length + CONFIG_COL);
 			break;
 
-		/* change mode type input */
+		/* Lines for changing mode */
 		case STEP_MODE :
 			cursor_pos = strlen(step_mode_name[step_mode]) + 4;
 			value_length = cursor_pos;
@@ -800,11 +822,14 @@ void change_cursor_line(uint8_t line)
 void process_ui_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 {
 	switch (cursor_line) {
+
+		/* Lines for color type input */
 		case START_COLOR :
 		case STOP_COLOR :
 			read_color_input(str, key_pressed, arrow_pressed);
 			break;
 
+		/* Lines for number input  */
 		case STEP_VALUE:
 		case NUMBER_OF_CYCLES :
 		case COLOR_CHANGE_RATE :
@@ -812,6 +837,7 @@ void process_ui_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 			read_number_input(str, key_pressed, arrow_pressed);
 			break;
 
+		/* Lines for mode input */
 		case STEP_MODE :
 			read_mode_input(str, key_pressed, arrow_pressed);
 	}
@@ -870,8 +896,6 @@ void read_color_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 
 		default :;
 	}
-
-
 }
 
 /**
@@ -1051,10 +1075,8 @@ void set_cursor(uint16_t row, uint16_t col)
 	itoa(row, row_str, 10);
 	itoa(col, col_str, 10);
 	PRINTF("%c%c", coordinates[0], coordinates[1]);
-	PRINTF("%s", row_str);
-	PRINTF("%c", coordinates[3]);
-	PRINTF("%s", col_str);
-	PRINTF("%c", coordinates[5]);
+	PRINTF("%s%c", row_str, coordinates[3]);
+	PRINTF("%s%c", col_str, coordinates[5]);
 }
 
 /**

@@ -93,7 +93,6 @@ typedef struct {
 	uint8_t color_scheme;
 } xfer_data;
 
-
 typedef int16_t color_type;
 
 /***********************************

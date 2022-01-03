@@ -64,13 +64,13 @@ int main(void) {
     master_mode = GPIO_PinRead(GPIOD, JUMPER_PIN);
     communication_queue = xQueueCreate(2, sizeof(led_config_type));
     device_status_queue = xQueueCreate(1, sizeof(_Bool));
-    pattern_status_queue = xQueueCreate(1, sizeof(uint8_t));
+    pattern_status_queue = xQueueCreate(1, sizeof(int16_t));
     pattern_control_queue = xQueueCreate(2, sizeof(led_config_type));
 
     /* task creations */
     xTaskCreate(ui_handler_task, "UI Task", configMINIMAL_STACK_SIZE + 300, &master_mode, 4, &ui_handler_handle);
-    xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 300, &master_mode, 4, NULL);
-    xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE + 300, &master_mode,4 ,&pattern_executor_handle);
+    xTaskCreate(communication_task, "Communication Task", configMINIMAL_STACK_SIZE + 300, &master_mode,  4, NULL);
+    xTaskCreate(pattern_executor_task, "Pattern Execution Task", configMINIMAL_STACK_SIZE + 300, &master_mode, 4, &pattern_executor_handle);
 
     /* start scheduler */
     vTaskStartScheduler();
