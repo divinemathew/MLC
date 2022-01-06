@@ -420,8 +420,25 @@ void communication_task(void* pvParameter)
 			i2c_master_init();
 			while(true){
 				if(xQueueReceive(communication_queue, &config, 0)==pdPASS){
-					if(config.control_mode!=temp_config.control_mode){
+					if(config.control_mode==START){
+						if(I2C_Handshake()){
+							device_status=true;
+							xQueueSend(device_status_queue,&device_status,100);
+						}else {
+							device_status=false;
+							xQueueSend(device_status_queue,&device_status,100);
+						}
+						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));
+						xQueueSend(pattern_control_queue,&config,100);
+					}else if(config.control_mode!=temp_config.control_mode){
 						/*Control Byte Only*/
+						if(I2C_Handshake()){
+							device_status=true;
+							xQueueSend(device_status_queue,&device_status,100);
+						}else {
+							device_status=false;
+							xQueueSend(device_status_queue,&device_status,100);
+						}
 						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));
 						xQueueSend(pattern_control_queue,&config,100);
 						if(xfer_status!=kStatus_Success){

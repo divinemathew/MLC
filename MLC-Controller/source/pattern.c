@@ -76,6 +76,7 @@ static uint8_t color_status = 0;
 static color_type step_value = {0, 0, 0};
 static TimerHandle_t color_change_timer;
 static uint8_t count = 0;
+static _Bool pattern_running = false;
 static color_type start_color = {0, 0, 0};
 static color_type stop_color = {0, 0, 0};
 
@@ -162,6 +163,7 @@ void pattern_executor_task(void* master_mode)
 					case START :
 						/* Initialize current color. Restart timer. */
 						count = 0;
+						pattern_running = true;
 						init_pattern(&current_color);
 						set_color(current_color);
 						color_status = color_to_byte(current_color);
@@ -178,6 +180,7 @@ void pattern_executor_task(void* master_mode)
 
 					case STOP :
 						/* Stop timer. Set color black */
+						pattern_running = false;
 						current_color = to_color_type(0);
 						xTimerStop(color_change_timer, 0);
 						set_color(current_color);
@@ -201,7 +204,7 @@ void pattern_executor_task(void* master_mode)
 
 					case UP :
 						/* If not manual mode, increment color */
-						if (config.step_mode == MANUAL) {
+						if (config.step_mode == MANUAL && pattern_running) {
 							current_color = next_color(current_color);
 							set_color(current_color);
 							color_status = color_to_byte(current_color);
@@ -211,7 +214,7 @@ void pattern_executor_task(void* master_mode)
 
 					case DOWN :
 						/* If not manual mode, decrement color */
-						if (config.step_mode == MANUAL) {
+						if (config.step_mode == MANUAL && pattern_running) {
 							current_color = previous_color(current_color);
 							set_color(current_color);
 							color_status = color_to_byte(current_color);
@@ -254,6 +257,7 @@ void color_timer(TimerHandle_t timer1)
 
 		/* Send pattern status : stopped */
 		int16_t stop = -1;
+		pattern_running = false;
 		xQueueSend(pattern_status_queue, &stop, 200);
 		xTimerStop(color_change_timer, 0);
 	}
@@ -337,7 +341,11 @@ color_type next_color(color_type color)
 				count++;
 			}
 		} else {
-			color = start_color;
+			if (config.step_mode != MANUAL) {
+				color = start_color;
+			} else {
+				color = stop_color;
+			}
 			count++;
 		}
 
@@ -388,7 +396,11 @@ color_type previous_color(color_type color)
 					count++;
 				}
 			} else {
-				color = stop_color;
+				if (config.step_mode != MANUAL) {
+					color = stop_color;
+				} else {
+					color = start_color;
+				}
 				count++;
 			}
 

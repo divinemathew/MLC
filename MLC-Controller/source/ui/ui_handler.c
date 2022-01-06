@@ -51,7 +51,7 @@ static QueueHandle_t pattern_status_queue;
 static _Bool master_mode = true;
 static _Bool device_connected = false;
 static _Bool config_edited = true;
-static _Bool changes_cancelled = false;
+static _Bool status_timer_flag = false;
 static _Bool anime_frame_1 = true;
 static _Bool pattern_running = false;
 static char config_value_str[][CONFIG_VALUE_LENGTH] = {"(0, 0, 0)",
@@ -88,6 +88,7 @@ void run_slave_ui(void);
 void print_configurations(void);
 void draw_color_slider(uint8_t color);
 void draw_current_color(uint8_t color);
+void draw_static_ui(void);
 void draw_ui(void);
 void update_status_task(void* pvParameter);
 uint8_t parse_color(char* color_str);
@@ -155,7 +156,7 @@ void ui_handler_task(void* board_is_master)
 * Revision History:
 * - 171221 ATG: Creation Date
 */
-void draw_ui(void)
+void draw_static_ui(void)
 {
 	PRINTF("%s", clear);
 	PRINTF("%s", hide_cursor);
@@ -243,8 +244,6 @@ void draw_ui(void)
 */
 void update_status_task(void* pvParameter)
 {
-	TickType_t xLastWakeTime;
-	xLastWakeTime = xTaskGetTickCount();
 	int16_t pattern_state;
 	uint8_t delay_count = 0;
 #if ENABLE_FAST_COLOR_REFRESH == 0
@@ -293,7 +292,6 @@ void update_status_task(void* pvParameter)
 			if (master_mode) {
 				animate_arrow();
 			}
-			changes_cancelled = false;
 #if ENABLE_FAST_COLOR_REFRESH == 0
 			if (color_changed) {
 				draw_current_color(current_color);
@@ -303,8 +301,9 @@ void update_status_task(void* pvParameter)
 			reset_cursor();
 		}
 
+		status_timer_flag = true;
 		xSemaphoreGive(console);
-		vTaskDelayUntil(&xLastWakeTime, STATUS_UPDATE_TICKS);
+		vTaskDelay(STATUS_UPDATE_TICKS);
 	}
 }
 
@@ -452,7 +451,7 @@ void run_master_ui(void)
 
 	/* print master home screen */
 	xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
-	draw_ui();
+	draw_static_ui();
 	print_configurations();
 	change_cursor_line(cursor_line);
 
@@ -556,50 +555,34 @@ void run_master_ui(void)
 			case 'C' :
 			case 'c' :
 				/* redraw configuration with last applied configuration. */
-				if (!changes_cancelled) {
-					changes_cancelled = true;
+				if (status_timer_flag) {
+					status_timer_flag = false;
 					draw_ui();
-					draw_current_color(current_color);
-					draw_color_slider(current_color);
-					decode_config();
-					print_pattern_state(configuration.control_mode);
-					print_configurations();
-					print_connection_status(device_connected);
-					change_cursor_line(cursor_line);
 				}
 				break;
 
 			case 'X' :
 			case 'x' :
 				/* redraw configuration with last applied configuration. */
-				if (width >= 3) {
-					width -= 3;
+				if (status_timer_flag) {
+					status_timer_flag = false;
+					if (width >= 3) {
+						width -= 3;
+					}
+					draw_ui();
 				}
-				draw_ui();
-				draw_current_color(current_color);
-				draw_color_slider(current_color);
-				decode_config();
-				print_pattern_state(configuration.control_mode);
-				print_configurations();
-				print_connection_status(device_connected);
-				change_cursor_line(cursor_line);
-
 				break;
 
 			case 'V' :
 			case 'v' :
 				/* redraw configuration with last applied configuration. */
-				if (width <= (23 * 3)) {
-					width += 3;
+				if (status_timer_flag) {
+					status_timer_flag = false;
+					if (width <= (23 * 3)) {
+						width += 3;
+					}
+					draw_ui();
 				}
-				draw_ui();
-				draw_current_color(current_color);
-				draw_color_slider(current_color);
-				decode_config();
-				print_pattern_state(configuration.control_mode);
-				print_configurations();
-				print_connection_status(device_connected);
-				change_cursor_line(cursor_line);
 				break;
 
 			default :
@@ -608,6 +591,17 @@ void run_master_ui(void)
 	}
 }
 
+void draw_ui(void)
+{
+	draw_static_ui();
+	draw_current_color(current_color);
+	draw_color_slider(current_color);
+	decode_config();
+	print_pattern_state(configuration.control_mode);
+	print_configurations();
+	print_connection_status(device_connected);
+	change_cursor_line(cursor_line);
+}
 /**
 * @brief Checks if config is valid.
 *
@@ -668,6 +662,17 @@ _Bool encode_config(void)
 		config_valid &= config_value_str[START_COLOR][BLUE_OFFSET] == config_value_str[STOP_COLOR][BLUE_OFFSET];
 	}
 
+	if (config_value_str[START_COLOR][RED_OFFSET] == config_value_str[STOP_COLOR][RED_OFFSET]) {
+		config_valid &= config_value_str[STEP_VALUE][RED_OFFSET] == '0';
+	}
+	if (config_value_str[START_COLOR][GREEN_OFFSET] == config_value_str[STOP_COLOR][GREEN_OFFSET]) {
+		config_valid &= config_value_str[STEP_VALUE][GREEN_OFFSET] == '0';
+	}
+	if (config_value_str[START_COLOR][BLUE_OFFSET] == config_value_str[STOP_COLOR][BLUE_OFFSET]) {
+		config_valid &= config_value_str[STEP_VALUE][BLUE_OFFSET] == '0';
+	}
+
+
 	/* check if values are greater than minimum */
 	config_valid &= atoi(config_value_str[NUMBER_OF_CYCLES]) >= MIN_NO_OF_CYCLES;
 	config_valid &= atoi(config_value_str[COLOR_CHANGE_RATE]) >= MIN_CHANGE_RATE;
@@ -706,7 +711,7 @@ _Bool encode_config(void)
 void run_slave_ui(void)
 {
 	xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
-	draw_ui();
+	draw_static_ui();
 	print_configurations();
 
 	xSemaphoreGive(console);
@@ -931,34 +936,23 @@ void change_cursor_line(uint8_t line)
 void print_line_error(uint8_t line)
 {
 	_Bool value_valid = true;
+	_Bool step_valid = true;
 
 	PRINTF("%s", hide_cursor);
 	switch (line) {
 		case START_COLOR :
-			/* check if color is greater than minimum value */
-			value_valid &= config_value_str[START_COLOR][RED_OFFSET] >= '0';
-			value_valid &= config_value_str[START_COLOR][GREEN_OFFSET] >= '0';
-			value_valid &= config_value_str[START_COLOR][BLUE_OFFSET] >= '0';
-
-			/* check if color is less than maximum value */
-			value_valid &= config_value_str[START_COLOR][RED_OFFSET] <= '7';
-			value_valid &= config_value_str[START_COLOR][GREEN_OFFSET] <= '7';
-			value_valid &= config_value_str[START_COLOR][BLUE_OFFSET] <= '3';
-			break;
-
 		case STOP_COLOR :
+		case STEP_VALUE :
 			/* check if color is greater than minimum value */
-			value_valid &= config_value_str[STOP_COLOR][RED_OFFSET] >= '0';
-			value_valid &= config_value_str[STOP_COLOR][GREEN_OFFSET] >= '0';
-			value_valid &= config_value_str[STOP_COLOR][BLUE_OFFSET] >= '0';
+			value_valid &= config_value_str[line][RED_OFFSET] >= '0';
+			value_valid &= config_value_str[line][GREEN_OFFSET] >= '0';
+			value_valid &= config_value_str[line][BLUE_OFFSET] >= '0';
 
 			/* check if color is less than maximum value */
-			value_valid &= config_value_str[STOP_COLOR][RED_OFFSET] <= '7';
-			value_valid &= config_value_str[STOP_COLOR][GREEN_OFFSET] <= '7';
-			value_valid &= config_value_str[STOP_COLOR][BLUE_OFFSET] <= '3';
-			break;
+			value_valid &= config_value_str[line][RED_OFFSET] <= '7';
+			value_valid &= config_value_str[line][GREEN_OFFSET] <= '7';
+			value_valid &= config_value_str[line][BLUE_OFFSET] <= '3';
 
-		case STEP_VALUE :
 			/* check if step value is greater than minimum value */
 			value_valid &= config_value_str[STEP_VALUE][RED_OFFSET] >= '0';
 			value_valid &= config_value_str[STEP_VALUE][GREEN_OFFSET] >= '0';
@@ -971,21 +965,36 @@ void print_line_error(uint8_t line)
 
 			/* Check if step value is 0 */
 			if (config_value_str[STEP_VALUE][RED_OFFSET] == '0') {
-				value_valid &= config_value_str[START_COLOR][RED_OFFSET] == config_value_str[STOP_COLOR][RED_OFFSET];
+				step_valid &= config_value_str[START_COLOR][RED_OFFSET] == config_value_str[STOP_COLOR][RED_OFFSET];
 			}
 			if (config_value_str[STEP_VALUE][GREEN_OFFSET] == '0') {
-				value_valid &= config_value_str[START_COLOR][GREEN_OFFSET] == config_value_str[STOP_COLOR][GREEN_OFFSET];
+				step_valid &= config_value_str[START_COLOR][GREEN_OFFSET] == config_value_str[STOP_COLOR][GREEN_OFFSET];
 			}
 			if (config_value_str[STEP_VALUE][BLUE_OFFSET] == '0') {
-				value_valid &= config_value_str[START_COLOR][BLUE_OFFSET] == config_value_str[STOP_COLOR][BLUE_OFFSET];
+				step_valid &= config_value_str[START_COLOR][BLUE_OFFSET] == config_value_str[STOP_COLOR][BLUE_OFFSET];
 			}
 
-			if (value_valid) {
+			if (config_value_str[START_COLOR][RED_OFFSET] == config_value_str[STOP_COLOR][RED_OFFSET]) {
+				step_valid &= config_value_str[STEP_VALUE][RED_OFFSET] == '0';
+			}
+			if (config_value_str[START_COLOR][GREEN_OFFSET] == config_value_str[STOP_COLOR][GREEN_OFFSET]) {
+				step_valid &= config_value_str[STEP_VALUE][GREEN_OFFSET] == '0';
+			}
+			if (config_value_str[START_COLOR][BLUE_OFFSET] == config_value_str[STOP_COLOR][BLUE_OFFSET]) {
+				step_valid &= config_value_str[STEP_VALUE][BLUE_OFFSET] == '0';
+			}
+
+			value_valid &= step_valid;
+			if (step_valid) {
 				set_cursor(ERROR_ROW + 2, ERROR_COL + 2);
 				clear_next(45);
+				set_cursor(ERROR_ROW + 3, ERROR_COL + 2);
+				clear_next(50);
 			} else {
 				set_cursor(ERROR_ROW + 2, ERROR_COL + 2);
 				PRINTF("Start color must be end color if step is 0.");
+				set_cursor(ERROR_ROW + 3, ERROR_COL + 2);
+				PRINTF("Start step must be 0 if start color is end color.");
 			}
 			break;
 
@@ -1019,6 +1028,10 @@ void print_line_error(uint8_t line)
 		if (value_valid) {
 			set_cursor(ERROR_ROW + 1, ERROR_COL + 2);
 			clear_next(45);
+			for (int line_no = START_COLOR; line_no <= STEP_VALUE; line_no++) {
+				set_cursor(CONFIG_ROW + line_no, CONFIG_COL - 1 + strlen(config_name[line_no]));
+				PRINTF(" ");
+			}
 		} else {
 			set_cursor(ERROR_ROW + 1, ERROR_COL + 2);
 			PRINTF("Start color must be less than end color.");
