@@ -26,9 +26,13 @@
 #define BLUE_MASK_VAL	0b00000011
 #define BLUE_SHIFT_VAL	0
 
-#define DUTY_CYCLE_RED(x)	(((x & RED_MASK_VAL) >> RED_SHIFT_VAL) * 100) / 7
-#define DUTY_CYCLE_GREEN(x)	(((x & GREEN_MASK_VAL) >> GREEN_SHIFT_VAL) * 100) / 7
-#define DUTY_CYCLE_BLUE(x)	(((x & BLUE_MASK_VAL) >> BLUE_SHIFT_VAL) * 100) / 3
+#define RED_VALUE(x)		(((x) & RED_MASK_VAL) >> RED_SHIFT_VAL)
+#define GREEN_VALUE(x)		(((x) & GREEN_MASK_VAL) >> GREEN_SHIFT_VAL)
+#define BLUE_VALUE(x)		(((x) & BLUE_MASK_VAL) >> BLUE_SHIFT_VAL)
+
+#define DUTY_CYCLE_RED(x)	(((x) * 100) / 7)
+#define DUTY_CYCLE_GREEN(x)	(((x) * 100) / 7)
+#define DUTY_CYCLE_BLUE(x)	(((x) * 100) / 3)
 
 #define MLC_FTM 			FTM3
 #define FTM_BLUE_CHANNEL    kFTM_Chnl_1  /* PTD1 12 BLUE */
@@ -67,10 +71,13 @@ static led_config_type config = {{0, 0, 0},
 								 0,
 								 STOP
 							    };
-static color_type current_color = 0;
+static color_type current_color = {0, 0, 0};
+static uint8_t color_status = 0;
+static color_type step_value = {0, 0, 0};
 static TimerHandle_t color_change_timer;
 static uint8_t count = 0;
-static color_type min_color = 0, max_color = 0;
+static color_type start_color = {0, 0, 0};
+static color_type stop_color = {0, 0, 0};
 
 /***********************************
  * Private Variables
@@ -88,6 +95,9 @@ void init_pattern(color_type* color);
 void set_pwm_frequency(uint16_t frequency);
 void set_color(color_type color);
 void pwm_init(ftm_chnl_t channel, uint16_t frequency);
+void copy_color(color_type color_out,color_type color_in);
+color_type to_color_type(uint8_t color_value);
+uint8_t color_to_byte(color_type color);
 
 /***********************************
  * Public Functions
@@ -119,7 +129,6 @@ void pattern_executor_task(void* master_mode)
 
 	while (1) {
 		if (xQueueReceive(pattern_control_queue, &received_config, 0)) {
-
 			/* If control is zero, save configurations. Else execute control */
 			if (received_config.control_mode == NOP) {
 				config = received_config;
@@ -131,11 +140,21 @@ void pattern_executor_task(void* master_mode)
 					xTimerStop(color_change_timer, 0);
 				}
 
-				/* Always set start-color as less than stop-color */
-				min_color = config.start_color[0];
-				max_color = config.stop_color[0];
-				if (config.start_color[0] > config.stop_color[0]) {
-					max_color |= 0x100;
+				start_color = to_color_type(config.start_color[0]);
+				stop_color = to_color_type(config.stop_color[0]);
+				step_value = to_color_type(config.step_value);
+
+				if (step_value.red == 0) {
+					step_value.red = 1;
+					stop_color.red = start_color.red;
+				}
+				if (step_value.green == 0) {
+					step_value.green = 1;
+					stop_color.green = start_color.green;
+				}
+				if (step_value.blue == 0) {
+					step_value.blue = 1;
+					stop_color.blue = start_color.blue;
 				}
 
 			} else {
@@ -145,7 +164,8 @@ void pattern_executor_task(void* master_mode)
 						count = 0;
 						init_pattern(&current_color);
 						set_color(current_color);
-						xQueueOverwrite(pattern_status_queue, (uint8_t *)&current_color);
+						color_status = color_to_byte(current_color);
+						xQueueOverwrite(pattern_status_queue, &color_status);
 						if (config.step_mode != MANUAL) {
 							if (going_up) {
 								current_color = next_color(current_color);
@@ -158,10 +178,11 @@ void pattern_executor_task(void* master_mode)
 
 					case STOP :
 						/* Stop timer. Set color black */
-						current_color = 0;
+						current_color = to_color_type(0);
 						xTimerStop(color_change_timer, 0);
 						set_color(current_color);
-						xQueueOverwrite(pattern_status_queue, (uint8_t *)&current_color);
+						color_status = color_to_byte(current_color);
+						xQueueOverwrite(pattern_status_queue, &color_status);
 						break;
 
 					case PAUSE:
@@ -183,7 +204,8 @@ void pattern_executor_task(void* master_mode)
 						if (config.step_mode == MANUAL) {
 							current_color = next_color(current_color);
 							set_color(current_color);
-							xQueueOverwrite(pattern_status_queue, (uint8_t *)&current_color);
+							color_status = color_to_byte(current_color);
+							xQueueOverwrite(pattern_status_queue, &color_status);
 						}
 						break;
 
@@ -192,7 +214,8 @@ void pattern_executor_task(void* master_mode)
 						if (config.step_mode == MANUAL) {
 							current_color = previous_color(current_color);
 							set_color(current_color);
-							xQueueOverwrite(pattern_status_queue, (uint8_t *)&current_color);
+							color_status = color_to_byte(current_color);
+							xQueueOverwrite(pattern_status_queue, &color_status);
 						}
 						break;
 				}
@@ -219,7 +242,8 @@ void color_timer(TimerHandle_t timer1)
 {
 	if (count < config.no_of_cycles || config.no_of_cycles == 0) {
 		set_color(current_color);
-		xQueueOverwrite(pattern_status_queue, (uint8_t *)&current_color);
+		color_status = color_to_byte(current_color);
+		xQueueOverwrite(pattern_status_queue, &color_status);
 
 		if (going_up) {
 			current_color = next_color(current_color);
@@ -252,22 +276,22 @@ void init_pattern(color_type* color)
 	switch (config.step_mode) {
 		case AUTO_UP :
 			going_up = true;
-			*color = min_color;
+			*color = start_color;
 			break;
 
 		case AUTO_DOWN :
 			going_up = false;
-			*color = max_color;
+			*color = stop_color;
 			break;
 
 		case AUTO_UP_DOWN :
 		case MANUAL:
 			if (master) {
 				going_up = true;
-				*color = min_color;
+				*color = start_color;
 			} else {
 				going_up = false;
-				*color = max_color;
+				*color = stop_color;
 			}
 			break;
 	}
@@ -289,23 +313,36 @@ void init_pattern(color_type* color)
 */
 color_type next_color(color_type color)
 {
-	color += config.step_value;
+	color.blue += step_value.blue;
+	if (color.blue == stop_color.blue + step_value.blue) {
+		color.blue = start_color.blue;
+		color.green += step_value.green;
+	} else if (color.blue > stop_color.blue) {
+		color.blue = stop_color.blue;
+	}
 
-	/* If greater than end, first set as end,
-	 * then go back to beginning */
-	if (color == max_color + config.step_value) {
+	if (color.green == stop_color.green + step_value.green) {
+		color.green = start_color.green;
+		color.red += step_value.red;
+	} else if (color.green > stop_color.green) {
+		color.green = stop_color.green;
+	}
+
+	if (color.red == stop_color.red + step_value.red) {
+
 		if (config.step_mode == AUTO_UP_DOWN) {
-			color = max_color;
+			color = stop_color;
 			going_up = false;
 			if (!master) {
 				count++;
 			}
 		} else {
-			color = min_color;
+			color = start_color;
 			count++;
 		}
-	} else if (color > max_color) {
-		color = max_color;
+
+	} else if (color.red > stop_color.red) {
+		color.red = stop_color.red;
 	}
 
 	return color;
@@ -327,23 +364,36 @@ color_type next_color(color_type color)
 */
 color_type previous_color(color_type color)
 {
-	color -= config.step_value;
+	color.blue -= step_value.blue;
+	if (color.blue == start_color.blue - step_value.blue) {
+		color.blue = stop_color.blue;
+		color.green -= step_value.green;
+	} else if (color.blue < start_color.blue) {
+		color.blue = start_color.blue;
+	}
 
-	/* If less than start, first set as start,
-	 * then go to end */
-	if (color == min_color - config.step_value) {
+	if (color.green == start_color.green - step_value.green) {
+		color.green = stop_color.green;
+		color.red -= step_value.red;
+	} else if (color.green < start_color.green) {
+		color.green = start_color.green;
+	}
+
+	if (color.red == start_color.red - step_value.red) {
+
 		if (config.step_mode == AUTO_UP_DOWN) {
-			color = min_color;
-			going_up = true;
-			if (master) {
+				color = start_color;
+				going_up = true;
+				if (master) {
+					count++;
+				}
+			} else {
+				color = stop_color;
 				count++;
 			}
-		} else {
-			color = max_color;
-			count++;
-		}
-	} else if (color < min_color) {
-		color = min_color;
+
+	} else if (color.red < start_color.red) {
+		color.red = start_color.red;
 	}
 
 	return color;
@@ -411,7 +461,7 @@ void pwm_init(ftm_chnl_t channel, uint16_t frequency)
 /**
 * @brief Update LED color.
 *
-* Sets the color of the led currently glowing;
+* Sets the color the led is producing.
 *
 * @param color	  Color to glow.
 *
@@ -422,9 +472,56 @@ void pwm_init(ftm_chnl_t channel, uint16_t frequency)
 */
 void set_color(color_type color)
 {
-	color = (uint8_t)color;
-	FTM_UpdatePwmDutycycle(MLC_FTM, FTM_RED_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_RED(color));
-	FTM_UpdatePwmDutycycle(MLC_FTM, FTM_GREEN_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_GREEN(color));
-	FTM_UpdatePwmDutycycle(MLC_FTM, FTM_BLUE_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_BLUE(color));
+	FTM_UpdatePwmDutycycle(MLC_FTM, FTM_RED_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_RED(color.red));
+	FTM_UpdatePwmDutycycle(MLC_FTM, FTM_GREEN_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_GREEN(color.green));
+	FTM_UpdatePwmDutycycle(MLC_FTM, FTM_BLUE_CHANNEL, kFTM_EdgeAlignedPwm, DUTY_CYCLE_BLUE(color.blue));
 	FTM_SetSoftwareTrigger(MLC_FTM, true);
+}
+
+/**
+* @brief Convert byte to color.
+*
+* Convert from 8-bit true color to color type.
+*
+* @param color_value    Color to convert.
+* @return color 		Converted color.
+*
+* @note
+*
+* Revision History:
+* - 201221 KAR: Creation Date
+*/
+color_type to_color_type(uint8_t color_value)
+{
+	color_type color;
+
+	color.red = RED_VALUE(color_value);
+	color.green = GREEN_VALUE(color_value);
+	color.blue = BLUE_VALUE(color_value);
+
+	return color;
+}
+
+/**
+* @brief Convert color to byte.
+*
+* Convert from color type to 8-bit true color.
+*
+* @param color	  		Color to convert.
+* @return color_byte 	Converted color.
+*
+* @note
+*
+* Revision History:
+* - 201221 KAR: Creation Date
+*/
+uint8_t color_to_byte(color_type color)
+{
+	uint8_t color_byte = 0;
+
+	color_byte |= color.red << 5;
+	color_byte |= color.green << 2;
+	color_byte |= color.blue;
+
+	return color_byte;
 }

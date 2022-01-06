@@ -70,6 +70,12 @@ typedef enum {
 	DOWN
 } control_mode_enum;
 
+typedef enum {
+	RED,
+	GREEN,
+	BLUE
+} color_enum;
+
 typedef struct {
 	uint8_t start_color[3];
 	uint8_t stop_color[3];
@@ -93,7 +99,11 @@ typedef struct {
 	uint8_t color_scheme;
 } xfer_data;
 
-typedef int16_t color_type;
+typedef struct {
+	int8_t red;
+	int8_t green;
+	int8_t blue;
+} color_type;
 
 /***********************************
 * Const Declarations

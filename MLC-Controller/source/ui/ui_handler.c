@@ -56,7 +56,7 @@ static _Bool anime_frame_1 = true;
 static _Bool pattern_running = false;
 static char config_value_str[][CONFIG_VALUE_LENGTH] = {"(0, 0, 0)",
 													   "(7, 7, 3)",
-													   "3",
+													   "(1, 1, 1)",
 													   "1.Auto_Up",
 													   "10",
 													   "1",
@@ -67,6 +67,7 @@ static uint8_t current_color = 0;
 static uint8_t cursor_line = 0;
 static uint8_t cursor_pos;
 static uint8_t value_length;
+static uint8_t width = 10;
 
 static led_config_type configuration;
 
@@ -81,6 +82,7 @@ void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed
 void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed);
 
 void change_cursor_line(uint8_t line);
+void print_line_error(uint8_t line);
 void run_master_ui(void);
 void run_slave_ui(void);
 void print_configurations(void);
@@ -122,7 +124,7 @@ void ui_handler_task(void* board_is_master)
     xTaskCreate(update_status_task, "Animation task", configMINIMAL_STACK_SIZE + 100, NULL, 4, NULL);
 
     /* create semaphore to use console */
-	console = xSemaphoreCreateMutex();
+	console = xSemaphoreCreateBinary();
 	xSemaphoreGive(console);
 
 	/* initialize configuration with defaults */
@@ -155,22 +157,26 @@ void ui_handler_task(void* board_is_master)
 */
 void draw_ui(void)
 {
+	PRINTF("%s", clear);
 	PRINTF("%s", hide_cursor);
 
 	/* Draw title */
-	set_cursor HEAD_1_ROW_COL;
-	move_cursor_left(TITLE_SQUARE_SIZE + 1);
-	PRINTF("%s%s", up, up);
-	draw_square(strlen(title_2) + TITLE_SQUARE_SIZE * 2, 4);
-	set_cursor HEAD_1_ROW_COL;
+	set_cursor (TITLE_ROW, TITLE_COL);
+	draw_square(TITLE_SQUARE_SIZE, 4);
+	set_cursor (TITLE_ROW + 2, TITLE_COL + (TITLE_SQUARE_SIZE / 2));
+	move_cursor_left(strlen(title_1) / 2);
 	PRINTF("%s", title_1);
-	set_cursor HEAD_2_ROW_COL;
+
+	set_cursor (TITLE_ROW + 3, TITLE_COL + (TITLE_SQUARE_SIZE / 2));
+	move_cursor_left(strlen(title_2) / 2);
 	PRINTF("%s", title_2);
-	PRINTF("%s ", down);
-    move_cursor_left(17);
+
+	set_cursor (TITLE_ROW + 4, TITLE_COL + (TITLE_SQUARE_SIZE / 2));
     if (master_mode) {
+    	move_cursor_left(strlen(master_name) / 2);
     	PRINTF("%s", master_name);
     } else {
+    	move_cursor_left(strlen(slave_name) / 2);
     	PRINTF("%s", slave_name);
     }
 
@@ -241,7 +247,9 @@ void update_status_task(void* pvParameter)
 	xLastWakeTime = xTaskGetTickCount();
 	int16_t pattern_state;
 	uint8_t delay_count = 0;
+#if ENABLE_FAST_COLOR_REFRESH == 0
 	_Bool color_changed = false;
+#endif
 
 	while(1) {
 		xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
@@ -255,15 +263,20 @@ void update_status_task(void* pvParameter)
 
 		/* Read and print current color from pattern executer */
 		if (xQueueReceive(pattern_status_queue, &pattern_state, 0) == pdPASS) {
+#if ENABLE_FAST_COLOR_REFRESH == 0
 			color_changed = true;
-
+#endif
 			/* if pattern has not stopped, display current color.
 			 * Else display pattern stopped */
 			if (pattern_state != -1) {
 				current_color = (uint8_t)pattern_state;
+#if ENABLE_FAST_COLOR_REFRESH == 0
 				if (configuration.step_mode == MANUAL) {
+#endif
 					draw_current_color(current_color);
+#if ENABLE_FAST_COLOR_REFRESH == 0
 				}
+#endif
 				draw_color_slider(current_color);
 			} else {
 
@@ -281,10 +294,12 @@ void update_status_task(void* pvParameter)
 				animate_arrow();
 			}
 			changes_cancelled = false;
+#if ENABLE_FAST_COLOR_REFRESH == 0
 			if (color_changed) {
 				draw_current_color(current_color);
 				color_changed = false;
 			}
+#endif
 			reset_cursor();
 		}
 
@@ -439,8 +454,12 @@ void run_master_ui(void)
 	xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 	draw_ui();
 	print_configurations();
-
 	change_cursor_line(cursor_line);
+
+	/* send configurations once */
+	configuration.control_mode = NOP;
+	xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
+
 	for ( ; ; ) {
 		xSemaphoreGive(console);
 		key_pressed = GETCHAR();
@@ -462,11 +481,13 @@ void run_master_ui(void)
 				} else if (key_pressed == 'A') {
 					if (cursor_line > MAX_UP) {
 						PRINTF("%s", up);
+						print_line_error(cursor_line);
 						change_cursor_line(--cursor_line);
 					}
 				} else if (key_pressed == 'B') {
 					if (cursor_line < MAX_DOWN) {
 						PRINTF("%s", down);
+						print_line_error(cursor_line);
 						change_cursor_line(++cursor_line);
 					}
 				}
@@ -548,6 +569,39 @@ void run_master_ui(void)
 				}
 				break;
 
+			case 'X' :
+			case 'x' :
+				/* redraw configuration with last applied configuration. */
+				if (width >= 3) {
+					width -= 3;
+				}
+				draw_ui();
+				draw_current_color(current_color);
+				draw_color_slider(current_color);
+				decode_config();
+				print_pattern_state(configuration.control_mode);
+				print_configurations();
+				print_connection_status(device_connected);
+				change_cursor_line(cursor_line);
+
+				break;
+
+			case 'V' :
+			case 'v' :
+				/* redraw configuration with last applied configuration. */
+				if (width <= (23 * 3)) {
+					width += 3;
+				}
+				draw_ui();
+				draw_current_color(current_color);
+				draw_color_slider(current_color);
+				decode_config();
+				print_pattern_state(configuration.control_mode);
+				print_configurations();
+				print_connection_status(device_connected);
+				change_cursor_line(cursor_line);
+				break;
+
 			default :
 				process_ui_input(config_value_str[cursor_line], key_pressed, NO_KEY_PRESSED);
 		}
@@ -573,29 +627,53 @@ _Bool encode_config(void)
 	_Bool config_valid = true;
 
 	/* check if color is greater than minimum value */
-	config_valid &= config_value_str[START_COLOR][1] >= '0';
-	config_valid &= config_value_str[START_COLOR][4] >= '0';
-	config_valid &= config_value_str[START_COLOR][7] >= '0';
-	config_valid &= config_value_str[STOP_COLOR][1] >= '0';
-	config_valid &= config_value_str[STOP_COLOR][4] >= '0';
-	config_valid &= config_value_str[STOP_COLOR][7] >= '0';
+	config_valid &= config_value_str[START_COLOR][RED_OFFSET] >= '0';
+	config_valid &= config_value_str[START_COLOR][GREEN_OFFSET] >= '0';
+	config_valid &= config_value_str[START_COLOR][BLUE_OFFSET] >= '0';
+	config_valid &= config_value_str[STOP_COLOR][RED_OFFSET] >= '0';
+	config_valid &= config_value_str[STOP_COLOR][GREEN_OFFSET] >= '0';
+	config_valid &= config_value_str[STOP_COLOR][BLUE_OFFSET] >= '0';
+
+	/* check if step value is greater than minimum value */
+	config_valid &= config_value_str[STEP_VALUE][RED_OFFSET] >= '0';
+	config_valid &= config_value_str[STEP_VALUE][GREEN_OFFSET] >= '0';
+	config_valid &= config_value_str[STEP_VALUE][BLUE_OFFSET] >= '0';
 
 	/* check if color is less than maximum value */
-	config_valid &= config_value_str[START_COLOR][1] <= '7';
-	config_valid &= config_value_str[START_COLOR][4] <= '7';
-	config_valid &= config_value_str[START_COLOR][7] <= '3';
-	config_valid &= config_value_str[STOP_COLOR][1] <= '7';
-	config_valid &= config_value_str[STOP_COLOR][4] <= '7';
-	config_valid &= config_value_str[STOP_COLOR][7] <= '3';
+	config_valid &= config_value_str[START_COLOR][RED_OFFSET] <= '7';
+	config_valid &= config_value_str[START_COLOR][GREEN_OFFSET] <= '7';
+	config_valid &= config_value_str[START_COLOR][BLUE_OFFSET] <= '3';
+	config_valid &= config_value_str[STOP_COLOR][RED_OFFSET] <= '7';
+	config_valid &= config_value_str[STOP_COLOR][GREEN_OFFSET] <= '7';
+	config_valid &= config_value_str[STOP_COLOR][BLUE_OFFSET] <= '3';
+
+	/* check if step value is less than maximum value */
+	config_valid &= config_value_str[STEP_VALUE][RED_OFFSET] <= '7';
+	config_valid &= config_value_str[STEP_VALUE][GREEN_OFFSET] <= '7';
+	config_valid &= config_value_str[STEP_VALUE][BLUE_OFFSET] <= '3';
+
+	/* Check if start color less than stop color */
+	config_valid &= (config_value_str[START_COLOR][RED_OFFSET] <= config_value_str[STOP_COLOR][RED_OFFSET]);
+	config_valid &= (config_value_str[START_COLOR][GREEN_OFFSET] <= config_value_str[STOP_COLOR][GREEN_OFFSET]);
+	config_valid &= (config_value_str[START_COLOR][BLUE_OFFSET] <= config_value_str[STOP_COLOR][BLUE_OFFSET]);
+
+	/* Check if step value is 0 */
+	if (config_value_str[STEP_VALUE][RED_OFFSET] == '0') {
+		config_valid &= config_value_str[START_COLOR][RED_OFFSET] == config_value_str[STOP_COLOR][RED_OFFSET];
+	}
+	if (config_value_str[STEP_VALUE][GREEN_OFFSET] == '0') {
+		config_valid &= config_value_str[START_COLOR][GREEN_OFFSET] == config_value_str[STOP_COLOR][GREEN_OFFSET];
+	}
+	if (config_value_str[STEP_VALUE][BLUE_OFFSET] == '0') {
+		config_valid &= config_value_str[START_COLOR][BLUE_OFFSET] == config_value_str[STOP_COLOR][BLUE_OFFSET];
+	}
 
 	/* check if values are greater than minimum */
-	config_valid &= atoi(config_value_str[STEP_VALUE]) >= MIN_STEP_VALUE;
 	config_valid &= atoi(config_value_str[NUMBER_OF_CYCLES]) >= MIN_NO_OF_CYCLES;
 	config_valid &= atoi(config_value_str[COLOR_CHANGE_RATE]) >= MIN_CHANGE_RATE;
 	config_valid &= atoi(config_value_str[REFRESH_RATE]) >= MIN_REFRESH_RATE;
 
 	/* check if values are less than maximum */
-	config_valid &= atoi(config_value_str[STEP_VALUE]) <= MAX_STEP_VALUE;
 	config_valid &= atoi(config_value_str[NUMBER_OF_CYCLES]) <= MAX_NO_OF_CYCLES;
 	config_valid &= atoi(config_value_str[COLOR_CHANGE_RATE]) <= MAX_CHANGE_RATE;
 	config_valid &= atoi(config_value_str[REFRESH_RATE]) <= MAX_REFRESH_RATE;
@@ -604,13 +682,12 @@ _Bool encode_config(void)
 	if (config_valid) {
 		configuration.start_color[0] = parse_color(config_value_str[START_COLOR]);
 		configuration.stop_color[0] = parse_color(config_value_str[STOP_COLOR]);
-		configuration.step_value = atoi(config_value_str[STEP_VALUE]);
+		configuration.step_value = parse_color(config_value_str[STEP_VALUE]);
 		configuration.step_mode = (uint8_t)step_mode;
 		configuration.no_of_cycles = atoi(config_value_str[NUMBER_OF_CYCLES]);
 		configuration.color_change_rate = atoi(config_value_str[COLOR_CHANGE_RATE]);
 		configuration.refresh_rate = atoi(config_value_str[REFRESH_RATE]);
 	}
-
 	return config_valid;
 }
 
@@ -673,7 +750,7 @@ void decode_config(void)
 {
 	color_to_str(configuration.start_color[0], config_value_str[START_COLOR]);
 	color_to_str(configuration.stop_color[0], config_value_str[STOP_COLOR]);
-	itoa(configuration.step_value, config_value_str[STEP_VALUE], 10);
+	color_to_str(configuration.step_value, config_value_str[STEP_VALUE]);
 	if (configuration.step_mode <= MAX_MODE_VALUE) {
 		strcpy(config_value_str[STEP_MODE], step_mode_name[configuration.step_mode]);
 		step_mode = configuration.step_mode;
@@ -808,13 +885,13 @@ void change_cursor_line(uint8_t line)
 		/* Lines for color type input */
 		case START_COLOR :
 		case STOP_COLOR :
+		case STEP_VALUE :
 			cursor_pos = 1;
 			value_length = 9;
 			set_cursor(CONFIG_ROW + (line * LINE_SPACE), strlen(config_name[line]) + 1 + CONFIG_COL);
 			break;
 
 		/* Lines for number input */
-		case STEP_VALUE:
 		case NUMBER_OF_CYCLES :
 		case COLOR_CHANGE_RATE :
 		case REFRESH_RATE :
@@ -840,6 +917,136 @@ void change_cursor_line(uint8_t line)
 }
 
 /**
+* @brief Display error.
+*
+* Display error message if configuration not valid.
+*
+* @param line    Configuration line
+*
+* @note
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
+void print_line_error(uint8_t line)
+{
+	_Bool value_valid = true;
+
+	PRINTF("%s", hide_cursor);
+	switch (line) {
+		case START_COLOR :
+			/* check if color is greater than minimum value */
+			value_valid &= config_value_str[START_COLOR][RED_OFFSET] >= '0';
+			value_valid &= config_value_str[START_COLOR][GREEN_OFFSET] >= '0';
+			value_valid &= config_value_str[START_COLOR][BLUE_OFFSET] >= '0';
+
+			/* check if color is less than maximum value */
+			value_valid &= config_value_str[START_COLOR][RED_OFFSET] <= '7';
+			value_valid &= config_value_str[START_COLOR][GREEN_OFFSET] <= '7';
+			value_valid &= config_value_str[START_COLOR][BLUE_OFFSET] <= '3';
+			break;
+
+		case STOP_COLOR :
+			/* check if color is greater than minimum value */
+			value_valid &= config_value_str[STOP_COLOR][RED_OFFSET] >= '0';
+			value_valid &= config_value_str[STOP_COLOR][GREEN_OFFSET] >= '0';
+			value_valid &= config_value_str[STOP_COLOR][BLUE_OFFSET] >= '0';
+
+			/* check if color is less than maximum value */
+			value_valid &= config_value_str[STOP_COLOR][RED_OFFSET] <= '7';
+			value_valid &= config_value_str[STOP_COLOR][GREEN_OFFSET] <= '7';
+			value_valid &= config_value_str[STOP_COLOR][BLUE_OFFSET] <= '3';
+			break;
+
+		case STEP_VALUE :
+			/* check if step value is greater than minimum value */
+			value_valid &= config_value_str[STEP_VALUE][RED_OFFSET] >= '0';
+			value_valid &= config_value_str[STEP_VALUE][GREEN_OFFSET] >= '0';
+			value_valid &= config_value_str[STEP_VALUE][BLUE_OFFSET] >= '0';
+
+			/* check if step value is less than maximum value */
+			value_valid &= config_value_str[STEP_VALUE][RED_OFFSET] <= '7';
+			value_valid &= config_value_str[STEP_VALUE][GREEN_OFFSET] <= '7';
+			value_valid &= config_value_str[STEP_VALUE][BLUE_OFFSET] <= '3';
+
+			/* Check if step value is 0 */
+			if (config_value_str[STEP_VALUE][RED_OFFSET] == '0') {
+				value_valid &= config_value_str[START_COLOR][RED_OFFSET] == config_value_str[STOP_COLOR][RED_OFFSET];
+			}
+			if (config_value_str[STEP_VALUE][GREEN_OFFSET] == '0') {
+				value_valid &= config_value_str[START_COLOR][GREEN_OFFSET] == config_value_str[STOP_COLOR][GREEN_OFFSET];
+			}
+			if (config_value_str[STEP_VALUE][BLUE_OFFSET] == '0') {
+				value_valid &= config_value_str[START_COLOR][BLUE_OFFSET] == config_value_str[STOP_COLOR][BLUE_OFFSET];
+			}
+
+			if (value_valid) {
+				set_cursor(ERROR_ROW + 2, ERROR_COL + 2);
+				clear_next(45);
+			} else {
+				set_cursor(ERROR_ROW + 2, ERROR_COL + 2);
+				PRINTF("Start color must be end color if step is 0.");
+			}
+			break;
+
+		case NUMBER_OF_CYCLES :
+			/* check if no of cycles is in range */
+			value_valid &= atoi(config_value_str[NUMBER_OF_CYCLES]) >= MIN_NO_OF_CYCLES;
+			value_valid &= atoi(config_value_str[NUMBER_OF_CYCLES]) <= MAX_NO_OF_CYCLES;
+			break;
+
+		case COLOR_CHANGE_RATE :
+			/* check if color change rate is in range */
+			value_valid &= atoi(config_value_str[COLOR_CHANGE_RATE]) >= MIN_CHANGE_RATE;
+			value_valid &= atoi(config_value_str[COLOR_CHANGE_RATE]) <= MAX_CHANGE_RATE;
+			break;
+
+		case REFRESH_RATE :
+			/* check if refresh rate is in range */
+			value_valid &= atoi(config_value_str[REFRESH_RATE]) >= MIN_REFRESH_RATE;
+			value_valid &= atoi(config_value_str[REFRESH_RATE]) <= MAX_REFRESH_RATE;
+	}
+
+	/* Check if start color less than stop color */
+	if (value_valid && (line == START_COLOR || line == STOP_COLOR)) {
+		value_valid &= (config_value_str[START_COLOR][RED_OFFSET] <= \
+				config_value_str[STOP_COLOR][RED_OFFSET]);
+		value_valid &= (config_value_str[START_COLOR][GREEN_OFFSET] <= \
+				config_value_str[STOP_COLOR][GREEN_OFFSET]);
+		value_valid &= (config_value_str[START_COLOR][BLUE_OFFSET] <= \
+				config_value_str[STOP_COLOR][BLUE_OFFSET]);
+
+		if (value_valid) {
+			set_cursor(ERROR_ROW + 1, ERROR_COL + 2);
+			clear_next(45);
+		} else {
+			set_cursor(ERROR_ROW + 1, ERROR_COL + 2);
+			PRINTF("Start color must be less than end color.");
+		}
+	}
+
+	/* Print line Error indicator */
+	if (!value_valid) {
+		set_cursor(CONFIG_ROW + line, CONFIG_COL - 1 + strlen(config_name[line]));
+		PRINTF("*");
+	} else if (value_valid && line != STEP_MODE) {
+		set_cursor(CONFIG_ROW + line, CONFIG_COL - 1 + strlen(config_name[line]));
+		PRINTF(" ");
+	}
+
+	/* Print error message */
+	if (encode_config()) {
+		set_cursor ERROR_ROW_COL;
+		clear_next(23);
+	} else {
+		set_cursor ERROR_ROW_COL;
+		PRINTF("* %s", pattern_state_const[4]);
+	}
+
+	reset_cursor();
+}
+
+/**
 * @brief Process key input.
 *
 * Key pressed is treated differently based on line selected.
@@ -860,11 +1067,11 @@ void process_ui_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 		/* Lines for color type input */
 		case START_COLOR :
 		case STOP_COLOR :
+		case STEP_VALUE :
 			read_color_input(str, key_pressed, arrow_pressed);
 			break;
 
 		/* Lines for number input  */
-		case STEP_VALUE:
 		case NUMBER_OF_CYCLES :
 		case COLOR_CHANGE_RATE :
 		case REFRESH_RATE :
