@@ -14,7 +14,7 @@
 */
 
 #include "mlc_common.h"
-#include <comm_handler.h>
+#include "comm_handler.h"
 #include "fsl_i2c.h"
 #include "fsl_clock.h"
 #include "fsl_port.h"
@@ -59,10 +59,6 @@ static QueueHandle_t device_status_queue;
 static QueueHandle_t pattern_control_queue;
 
 static _Bool g_SlaveCompletionFlag;
-static _Bool config_receiveflag 	= false;
-static _Bool command_receiveflag 	= false;
-static _Bool master_readflag 		= false;
-static _Bool master_writeflag 	    = false;
 static _Bool ismaster 				= false;
 
 /***********************************
@@ -203,7 +199,6 @@ status_t I2C_write(uint32_t offset,uint8_t add_size,uint8_t* data,uint8_t data_s
 	masterXfer.subaddress=offset;
 	masterXfer.subaddressSize= add_size;
 	i2c_writestatus = I2C_MasterTransferBlocking(I2C0, &masterXfer);
-	//PRINTF("\r\n%d",i2c_writestatus);
 	return i2c_writestatus;
 }
 
@@ -227,24 +222,19 @@ _Bool I2C_Handshake(void)
 {
 	uint8_t rx_data[2];
 	uint8_t tx_data[2] = {0xDE,0xAD};
-	uint8_t slave_status;
-//	//PRINTF("Entered Handshake");
-	slave_status = I2C_read(SLAVEMODE_OFFSET,1,rx_data,2);
-//	//PRINTF("%d",slave_status);
+
+	I2C_read(SLAVEMODE_OFFSET,1,rx_data,2);
+
 	if(I2C_read(SLAVEMODE_OFFSET,1,rx_data,2)==kStatus_Success){
-//		//PRINTF("Read Salve Offeset 0x00");
 		if(rx_data[0]==0xBE && rx_data[1]==0xEF){
-			slave_status = true;
-//			//PRINTF("Read Salve Identified");
+
 			if(I2C_write(SLAVE_WRITE_OFFSET, 1, tx_data, 2)==kStatus_Success){
-//				//PRINTF("Read Salve Read");
 				return true;
 			}
 		} else{
 			return false;
 		}
 	} else{
-//		//PRINTF("MAIN ERROR");
 		return false;
 	}
 
@@ -284,15 +274,12 @@ static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void 
             /*  Update information for transmit process */
             xfer->data     = slave_ID;
             xfer->dataSize = TRANSMIT_DATA_LENGTH;
-//            //PRINTF("\r\nTRANSMIT ACTIVE");
             break;
         /*  Receive request */
         case kI2C_SlaveReceiveEvent:
             /*  Update information for received process */
             xfer->data     = rx_buff;
             xfer->dataSize = RECEIVE_DATA_LENGTH;
-//            //PRINTF("\r\nRECEIVE ACTIVE");
-           // //PRINTF("%x ",rx_buff[0]);
             break;
         /*  Transfer done */
         case kI2C_SlaveCompletionEvent:
@@ -328,77 +315,6 @@ static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void 
 * Revision History:
 * - 081221  DAM : Creation Date
 */
-//void communication_task(void* pvParameter)
-//{
-//	ismaster = (_Bool) pvParameter;
-//	communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
-//	device_status_queue = get_queue_handle(SLAVE_STATUS_QUEUE);
-//
-//	led_config_type tx_data;
-//	tx_data.control_mode = 0x5;
-//	i2c_pin_config();
-//
-//	/*Master Mode*/
-//	if(ismaster){
-//		i2c_master_init(); /*I2C Master Initilization*/
-//
-//		//PRINTF("\r\nCommunication Task");
-//		I2C_write(0x00,(uint8_t*)&tx_data, 1, sizeof(led_config_type));
-//		/*Communication Task Loop*/
-////		while(1)
-////		{
-////			/*Checking For any item available in Queue*/
-////			if(xQueueReceive(communication_queue, &tx_data, 0)==pdPASS){
-////				if(tx_data.control_mode!=0){
-////					////PRINTF("\r\nEntered In conTrol Mode");
-////					/*Transfer the data to MLC Slave via I2C Protocol*/
-////					i2c_write(CONTROL_MODE_OFFSET, &tx_data.control_mode, 1, 1);
-////					/*Transfer the control bit (CONFIG) to PATTERN QUEUE*/
-////				}
-////				else if(tx_data.control_mode==0){
-////					/*Transfer the CONFIG to PATTERN QUEUE*/
-////					////PRINTF("%d",tx_data.start_color[0]);
-////					/*Transfer the control bit to MLC Slave via I2C Protocol*/
-////					i2c_write(SLAVEMODE_OFFSET, &tx_data, 1, sizeof(led_config_type));
-////				}
-////			}
-////			else {
-////				__NOP();
-////			}
-////		}
-//	}
-//	/*MLC Slave Mode*/
-//	else if (!ismaster){
-//		i2c_slave_handle_t slave_handle;
-//		led_config_type rx_data;
-//	    memset(&slave_handle, 0, sizeof(slave_handle));
-//		I2C_SlaveTransferCreateHandle(I2C0_BASE, &slave_handle, i2c_slave_callback, NULL);
-//		i2c_slave_init(); /*Initilization of I2C Slave*/
-//
-//		I2C_SlaveTransferNonBlocking(I2C0_BASE, &slave_handle, kI2C_SlaveCompletionEvent | kI2C_SlaveTransmitEvent | kI2C_SlaveReceiveEvent);
-//
-//		while(true){
-//			if(master_readflag == true){
-//				xQueueSend(device_status_queue,&master_readflag,0);
-//				//PRINTF("\r\nMaster Read");
-//				master_readflag=false;
-//			}
-//			if(master_writeflag == true){
-//				master_writeflag = false;
-//				//PRINTF("\r\nMaster Write");
-//			}
-//			if(config_receiveflag == true){
-//				config_receiveflag=false;
-//			}
-//			if(command_receiveflag == true){
-//				command_receiveflag=false;
-//				for(uint8_t itr = 0;itr<I2C_DATA_LENGTH;itr++){
-//					//PRINTF("%d",rx_buff[itr]);
-//				}
-//			}
-//	}
-//	}
-//}
 
 
 void communication_task(void* pvParameter)
@@ -414,8 +330,7 @@ void communication_task(void* pvParameter)
 	communication_queue = get_queue_handle(COMMUNICATION_QUEUE);
 	device_status_queue = get_queue_handle(DEVICE_STATUS_QUEUE);
 	pattern_control_queue = get_queue_handle(PATTERN_CONTROL_QUEUE);
-	switch (ismaster) {
-		case true:
+	if (ismaster) {
 			/*MASTER MODE*/
 			i2c_master_init();
 			while(true){
@@ -443,9 +358,7 @@ void communication_task(void* pvParameter)
 						xQueueSend(pattern_control_queue,&config,100);
 						if(xfer_status!=kStatus_Success){
 
-//							//PRINTF("CONTROL BIT FAILED");
 						}
-						//temp_config.control_mode = config.control_mode;
 					}else{
 						/*HANDSHAKE + Send Full Config*/
 						if(I2C_Handshake()){
@@ -460,10 +373,8 @@ void communication_task(void* pvParameter)
 							xferdata.refresh_rate 		=	config.refresh_rate;
 							xferdata.color_scheme		=	config.color_scheme;
 							config.control_mode=NOP;
-//							xfer_status = I2C_write(CONFIG_OFFSET, 1, (uint8_t*)&config, sizeof(led_config_type));
 							xfer_status = I2C_write(CONFIG_OFFSET, 1, (uint8_t*)&xferdata, sizeof(xferdata));
 							if (xfer_status !=kStatus_Success) {
-//								//PRINTF("\r\nTransfer Failed To Slave Config");
 							}
 							xQueueSend(pattern_control_queue,&config,100);
 						}else{
@@ -476,8 +387,7 @@ void communication_task(void* pvParameter)
 					taskYIELD();
 				}
 			}
-			break;
-		case false:
+	}else{
 			/*SLAVE MODE*/
 				i2c_slave_init();
 				i2c_slave_handle_t slave_handle;
@@ -502,9 +412,6 @@ void communication_task(void* pvParameter)
 								break;
 								case 0x04:
 									xferdata = *(xfer_data *)&rx_buff[1];
-//									temp_config.stop_color[0] = xferdata.start_color[0];
-//									xferdata.start_color[0]=xferdata.stop_color[0];
-//									xferdata.stop_color[0]=temp_config.stop_color[0];
 									if(xferdata.step_mode==AUTO_UP){
 										xferdata.step_mode=AUTO_DOWN;
 									} else if(xferdata.step_mode ==AUTO_DOWN){
@@ -545,55 +452,7 @@ void communication_task(void* pvParameter)
 						}
 
 					}
-
-			break;
-		default:
-			break;
 	}
 }
 
-
-
-//	led_config_type config;
-//	i2c_slave_init();
-//	i2c_slave_handle_t slave_handle;
-//    memset(&slave_handle, 0, sizeof(slave_handle));
-//	I2C_SlaveTransferCreateHandle(I2C0, &slave_handle, i2c_slave_callback, NULL);
-//	I2C_SlaveTransferNonBlocking(I2C0, &slave_handle, kI2C_SlaveCompletionEvent |
-//			kI2C_SlaveAddressMatchEvent | kI2C_SlaveTransmitEvent | kI2C_SlaveReceiveEvent);
-//
-//	//PRINTF("\r\nSlave Entered");
-//	while(1){
-//		if(g_SlaveCompletionFlag==true){
-//			switch (rx_buff[0]) {
-//				case 0x07:
-//					//PRINTF("MASTER READ DETECTED");
-//					g_SlaveCompletionFlag=false;
-//					break;
-//				case 0x02:
-//					if(rx_buff[1]==0xDE && rx_buff[2]==0xAD){
-//						//PRINTF("%x  %x %x MASTER DETECTED",rx_buff[0],rx_buff[1],rx_buff[2]);
-//					}
-//					g_SlaveCompletionFlag=false;
-//					break;
-//				case 0x04:
-//					config = *(led_config_type *)&rx_buff[1];
-//					//PRINTF("%d",config.start_color[0]);
-//					//PRINTF("CONFIG DETECTED");
-//					g_SlaveCompletionFlag=false;
-//					break;
-//				case 0x11:
-//					config.control_mode = rx_buff[1];
-//					//PRINTF("%d",config.control_mode);
-//					//PRINTF("CONTROl DETECTED");
-//					g_SlaveCompletionFlag=false;
-//					break;
-//				default:
-//					g_SlaveCompletionFlag=false;
-//					break;
-//			}
-//		}
-//
-//	}
-//}
 
