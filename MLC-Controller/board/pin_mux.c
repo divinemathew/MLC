@@ -172,6 +172,7 @@ void BOARD_InitPins(void)
         kPORT_MuxAsGpio,
 		kPORT_UnlockRegister
     };
+    
     PORT_SetPinConfig(PORTD, JUMPER_PIN, &jumper_pin_config);
 
     gpio_pin_config_t jumper_config = {
@@ -182,8 +183,6 @@ void BOARD_InitPins(void)
     PORT_SetPinMux(PORTD, 1U, kPORT_MuxAlt4);
     PORT_SetPinMux(PORTD, 2U, kPORT_MuxAlt4);
     PORT_SetPinMux(PORTD, 3U, kPORT_MuxAlt4);
-
-
 
     /* PORTA2 (pin 36) is configured as TRACE_SWO */
     PORT_SetPinMux(PORTA, 2U, kPORT_MuxAlt7);

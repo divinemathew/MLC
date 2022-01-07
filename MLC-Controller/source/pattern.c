@@ -99,6 +99,8 @@ void pwm_init(ftm_chnl_t channel, uint16_t frequency);
 void copy_color(color_type color_out,color_type color_in);
 color_type to_color_type(uint8_t color_value);
 uint8_t color_to_byte(color_type color);
+void set_led(color_enum color, _Bool state);
+
 
 /***********************************
  * Public Functions
@@ -243,6 +245,12 @@ void pattern_executor_task(void* master_mode)
 */
 void color_timer(TimerHandle_t timer1)
 {
+	/* Blink board LED */
+	set_led(GREEN, true);
+		SDK_DelayAtLeastUs(1000, 120000000);
+	set_led(GREEN, false);
+
+	/* Change color */
 	if (count < config.no_of_cycles || config.no_of_cycles == 0) {
 		set_color(current_color);
 		color_status = color_to_byte(current_color);

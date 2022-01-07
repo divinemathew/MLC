@@ -20,7 +20,7 @@
 #define ENABLE_FAST_COLOR_REFRESH	1
 #define ANIMATE_TICKS 		    	10
 
-#define SCREEN_WIDTH 				width
+#define SCREEN_WIDTH 				screen_width
 #define TITLE_ROW					1
 #define TITLE_COL					4
 #define MAX_INPUT_LENGTH        	5
@@ -134,7 +134,7 @@ const char pattern_state_const[][22] = {"   Pattern Stopped   ",
 * Typedefs and Enum Declarations
 ***********************************/
 typedef enum {
-	NO_KEY_PRESSED,
+	NO_ARROW_PRESSED,
 	UP_KEY,
 	DOWN_KEY,
 	LEFT_KEY,

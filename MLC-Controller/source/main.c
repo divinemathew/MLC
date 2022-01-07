@@ -56,12 +56,15 @@ int main(void) {
 
 	/* Init board hardware. */
     BOARD_InitBootPins();
+    BOARD_InitLEDsPins();
     BOARD_InitBootClocks();
     BOARD_InitBootPeripherals();
     BOARD_InitDebugConsole();
 
-    /* queue creations */
+    /* Read if master mode */
     master_mode = GPIO_PinRead(GPIOD, JUMPER_PIN);
+
+    /* queue creations */
     communication_queue = xQueueCreate(2, sizeof(led_config_type));
     device_status_queue = xQueueCreate(1, sizeof(_Bool));
     pattern_status_queue = xQueueCreate(1, sizeof(int16_t));

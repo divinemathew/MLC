@@ -771,7 +771,7 @@ status_t UART_WriteBlocking(UART_Type *base, const uint8_t *data, size_t length)
 #if UART_RETRY_TIMES
         if (waitTimes == 0U)
         {
-            return kStatus_LPUART_Timeout;
+            return kStatus_UART_Timeout;
         }
 #endif
         base->D = *(data++);
@@ -789,7 +789,7 @@ status_t UART_WriteBlocking(UART_Type *base, const uint8_t *data, size_t length)
 #if UART_RETRY_TIMES
     if (waitTimes == 0U)
     {
-        return kStatus_LPUART_Timeout;
+        return kStatus_UART_Timeout;
     }
 #endif
     return kStatus_Success;
@@ -849,7 +849,7 @@ status_t UART_ReadBlocking(UART_Type *base, uint8_t *data, size_t length)
 #if UART_RETRY_TIMES
             if (0U == --waitTimes)
             {
-                status = kStatus_LPUART_Timeout;
+                status = kStatus_UART_Timeout;
                 break;
             }
 #endif

@@ -58,7 +58,7 @@ static char config_value_str[][CONFIG_VALUE_LENGTH] = {"(0, 0, 0)",
 													   "(7, 7, 3)",
 													   "(1, 1, 1)",
 													   "1.Auto_Up",
-													   "10",
+													   "1",
 													   "1",
 													   "100"
 													   };
@@ -67,7 +67,7 @@ static uint8_t current_color = 0;
 static uint8_t cursor_line = 0;
 static uint8_t cursor_pos;
 static uint8_t value_length;
-static uint8_t width = 10;
+static uint8_t screen_width = 6;
 
 static led_config_type configuration;
 
@@ -99,6 +99,7 @@ void print_connection_status(_Bool status);
 void reset_cursor(void);
 void animate_arrow(void);
 void decode_config(void);
+void set_led(color_enum color, _Bool state);
 
 /***********************************
  * Public Functions
@@ -110,8 +111,6 @@ void decode_config(void);
 * Initialize configuration and start master or slave UI.
 *
 * @param board_is_master	  Task parameter to check MLC mode.
-*
-* @note
 *
 * Revision History:
 * - 201221 KAR: Creation Date
@@ -148,10 +147,6 @@ void ui_handler_task(void* board_is_master)
 * @brief Prints UI screen outline.
 *
 * Redraws all static objects on screen.
-*
-* @param
-* @return
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -237,8 +232,6 @@ void draw_static_ui(void)
 * Manages arrow animation and color position slider animation.
 *
 *
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -291,6 +284,13 @@ void update_status_task(void* pvParameter)
 			delay_count = 0;
 			if (master_mode) {
 				animate_arrow();
+				set_led(RED, true);
+				SDK_DelayAtLeastUs(1000, 120000000);
+				set_led(RED, false);
+			} else {
+				set_led(BLUE, true);
+				SDK_DelayAtLeastUs(1000, 120000000);
+				set_led(BLUE, false);
 			}
 #if ENABLE_FAST_COLOR_REFRESH == 0
 			if (color_changed) {
@@ -298,6 +298,8 @@ void update_status_task(void* pvParameter)
 				color_changed = false;
 			}
 #endif
+			/* blink board led */
+
 			reset_cursor();
 		}
 
@@ -308,12 +310,33 @@ void update_status_task(void* pvParameter)
 }
 
 /**
+* @brief Control board led.
+*
+* Set on-board LED to a color.
+*
+* @param color 	Color to set.
+* @param state 	LED on or off
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
+void set_led(color_enum color, _Bool state)
+{
+	if (color == RED) {
+		GPIO_PinWrite(GPIOB, BOARD_LED_RED_PIN, !state);
+	} else if (color == GREEN) {
+		GPIO_PinWrite(GPIOE, BOARD_LED_GREEN_PIN, !state);
+	} else if (color == BLUE) {
+		GPIO_PinWrite(GPIOB, BOARD_LED_BLUE_PIN, !state);
+	}
+}
+
+/**
 * @brief Refresh color slider.
 *
 * Redraws color slider.
 *
 * @param color color to display.
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -339,7 +362,6 @@ void draw_color_slider(uint8_t color)
 * Redraws current color.
 *
 * @param color color to display.
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -360,10 +382,6 @@ void draw_current_color(uint8_t color)
 *
 * Animates arrow as step mode selection hind.
 * Arrow position is changed each time this function is called.
-*
-* @param
-*
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -413,10 +431,6 @@ void animate_arrow(void)
 * Resets cursor position back to the user input field after performing
 * other UI object updates.
 *
-* @param
-*
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -429,6 +443,7 @@ void reset_cursor(void)
 		col = strlen(config_name[cursor_line]) + cursor_pos + CONFIG_COL;
 		set_cursor(row, col);
 		PRINTF("%s", show_cursor);
+
 	}
 }
 
@@ -437,16 +452,12 @@ void reset_cursor(void)
 *
 * Non returning function for performing master mode UI operations.
 *
-* @param
-*
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
 void run_master_ui(void)
 {
-	char key_pressed;
+	char key_pressed = 0;
 	_Bool pattern_paused = false;
 
 	/* print master home screen */
@@ -462,7 +473,9 @@ void run_master_ui(void)
 	for ( ; ; ) {
 		xSemaphoreGive(console);
 		key_pressed = GETCHAR();
-		xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
+		if (key_pressed != 0xFF) {
+			xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
+		}
 		switch (key_pressed) {
 
 			/* if read an escape sequence, check which escape sequence is received */
@@ -533,6 +546,7 @@ void run_master_ui(void)
 					print_pattern_state(configuration.control_mode);
 					taskYIELD();
 				} else {
+					set_led(RED, true);
 					set_cursor PATTERN_STATE_ROW_COL;
 					PRINTF("%s", pattern_state_const[4]);
 				}
@@ -566,8 +580,8 @@ void run_master_ui(void)
 				/* redraw configuration with last applied configuration. */
 				if (status_timer_flag) {
 					status_timer_flag = false;
-					if (width >= 3) {
-						width -= 3;
+					if (screen_width >= 3) {
+						screen_width -= 3;
 					}
 					draw_ui();
 				}
@@ -578,19 +592,27 @@ void run_master_ui(void)
 				/* redraw configuration with last applied configuration. */
 				if (status_timer_flag) {
 					status_timer_flag = false;
-					if (width <= (23 * 3)) {
-						width += 3;
+					if (screen_width <= (23 * 3)) {
+						screen_width += 3;
 					}
 					draw_ui();
 				}
 				break;
 
 			default :
-				process_ui_input(config_value_str[cursor_line], key_pressed, NO_KEY_PRESSED);
+				process_ui_input(config_value_str[cursor_line], key_pressed, NO_ARROW_PRESSED);
 		}
 	}
 }
 
+/**
+* @brief Draw full UI.
+*
+* Redraw full UI screen once;
+*
+* Revision History:
+* - 171221 ATG: Creation Date
+*/
 void draw_ui(void)
 {
 	draw_static_ui();
@@ -602,16 +624,14 @@ void draw_ui(void)
 	print_connection_status(device_connected);
 	change_cursor_line(cursor_line);
 }
+
 /**
 * @brief Checks if config is valid.
 *
 * Checks if within the range of all configuration values.
 * Converts all string inputs to binary form.
 *
-* @param
-*
 * @return Returns TRUE if valid.
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -651,7 +671,7 @@ _Bool encode_config(void)
 	config_valid &= (config_value_str[START_COLOR][GREEN_OFFSET] <= config_value_str[STOP_COLOR][GREEN_OFFSET]);
 	config_valid &= (config_value_str[START_COLOR][BLUE_OFFSET] <= config_value_str[STOP_COLOR][BLUE_OFFSET]);
 
-	/* Check if step value is 0 */
+	/* Check if start color equal to stop color when step value is 0 */
 	if (config_value_str[STEP_VALUE][RED_OFFSET] == '0') {
 		config_valid &= config_value_str[START_COLOR][RED_OFFSET] == config_value_str[STOP_COLOR][RED_OFFSET];
 	}
@@ -662,6 +682,7 @@ _Bool encode_config(void)
 		config_valid &= config_value_str[START_COLOR][BLUE_OFFSET] == config_value_str[STOP_COLOR][BLUE_OFFSET];
 	}
 
+	/* Check if step value is 0 when start color equal to stop color */
 	if (config_value_str[START_COLOR][RED_OFFSET] == config_value_str[STOP_COLOR][RED_OFFSET]) {
 		config_valid &= config_value_str[STEP_VALUE][RED_OFFSET] == '0';
 	}
@@ -700,10 +721,6 @@ _Bool encode_config(void)
 * @brief Switch to slave mode.
 *
 * Non returning function for slave mode UI operations.
-*
-* @param
-*
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -746,8 +763,6 @@ void run_slave_ui(void)
 *
 * @param control	control input received
 *
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -771,8 +786,6 @@ void decode_config(void)
 * Prints if the pattern is currently running or is in any other state.
 *
 * @param control	control input received
-*
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -807,9 +820,7 @@ void print_pattern_state(uint8_t control)
 *
 * Prints if slave or master is connected or not in status field.
 *
-* @param
-*
-* @note
+* @param status 	Connected on not.
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -845,10 +856,6 @@ void print_connection_status(_Bool status)
 *
 * Redraws all the configuration values with current configuration values.
 *
-* @param
-*
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -877,8 +884,6 @@ void print_configurations(void)
 * Updates config description and range values for the current line.
 *
 * @param line	 destination line to change to
-*
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -928,8 +933,6 @@ void change_cursor_line(uint8_t line)
 *
 * @param line    Configuration line
 *
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -963,7 +966,7 @@ void print_line_error(uint8_t line)
 			value_valid &= config_value_str[STEP_VALUE][GREEN_OFFSET] <= '7';
 			value_valid &= config_value_str[STEP_VALUE][BLUE_OFFSET] <= '3';
 
-			/* Check if step value is 0 */
+			/* Check if start color equal to stop color when step value is 0 */
 			if (config_value_str[STEP_VALUE][RED_OFFSET] == '0') {
 				step_valid &= config_value_str[START_COLOR][RED_OFFSET] == config_value_str[STOP_COLOR][RED_OFFSET];
 			}
@@ -974,6 +977,7 @@ void print_line_error(uint8_t line)
 				step_valid &= config_value_str[START_COLOR][BLUE_OFFSET] == config_value_str[STOP_COLOR][BLUE_OFFSET];
 			}
 
+			/* Check if step value is 0 when start color equal to stop color */
 			if (config_value_str[START_COLOR][RED_OFFSET] == config_value_str[STOP_COLOR][RED_OFFSET]) {
 				step_valid &= config_value_str[STEP_VALUE][RED_OFFSET] == '0';
 			}
@@ -1068,8 +1072,6 @@ void print_line_error(uint8_t line)
 * @param key_pressed     character input
 * @param arrow_pressed	 arrow key pressed
 *
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -1105,8 +1107,6 @@ void process_ui_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 * @param str             string to process
 * @param key_pressed     character input
 * @param arrow_pressed	 arrow key pressed
-*
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -1161,8 +1161,6 @@ void read_color_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 * @param key_pressed     character input
 * @param arrow_pressed	 arrow key pressed
 *
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -1203,8 +1201,6 @@ void read_mode_input(char* str, char key_pressed, arrow_key_type arrow_pressed)
 * @param str             string to process
 * @param key_pressed     character input
 * @param arrow_pressed	 arrow key pressed
-*
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -1265,8 +1261,6 @@ void read_number_input(char* str, char key_pressed, arrow_key_type arrow_pressed
 * @param color_str	source string to process.
 * @return result 	Converted color output.
 *
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -1293,8 +1287,6 @@ uint8_t parse_color(char* color_str)
 * @param color	 source color.
 * @param str_out destination string.
 *
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -1318,8 +1310,6 @@ void color_to_str(uint8_t color, char* str_out)
 * @param row	line number from top.
 * @param col 	columns from left.
 *
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -1339,8 +1329,6 @@ void set_cursor(uint16_t row, uint16_t col)
 * Moves cursor a number of times in a single shot.
 *
 * @param no_of_times 	times to move left
-*
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -1364,8 +1352,6 @@ void move_cursor_left(uint16_t no_of_times)
 * @param position	 position to insert
 * @param input		 character to be inserted
 *
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -1388,8 +1374,6 @@ void insert(char* str, uint16_t position, char input)
 * @param position	 position to insert
 * @param input		 character to be inserted
 *
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -1409,8 +1393,6 @@ void delete(char* str, uint16_t position)
 *
 * @param length  	Length of the square.
 * @param breadth    Breadth of the square.
-*
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
@@ -1453,9 +1435,6 @@ void draw_dotted_square(uint16_t length, uint16_t breadth)
 * @param length  	Length of the square.
 * @param breadth    Breadth of the square.
 *
-*
-* @note
-*
 * Revision History:
 * - 171221 ATG: Creation Date
 */
@@ -1495,8 +1474,6 @@ void draw_square(uint16_t length, uint16_t breadth)
 * Clear remaining characters number of characters.
 *
 * @param length		number of characters to clear.
-*
-* @note
 *
 * Revision History:
 * - 171221 ATG: Creation Date
