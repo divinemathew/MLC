@@ -366,7 +366,11 @@ void communication_task(void* pvParameter)
 							device_status = true;
 							xQueueSend(device_status_queue,&device_status,100);
 							xferdata.start_color[0]		=	config.start_color[0];
+							xferdata.start_color[1]		=	config.start_color[1];
+							xferdata.start_color[2]		=	config.start_color[2];
 							xferdata.stop_color[0]		=	config.stop_color[0];
+							xferdata.stop_color[1]		=	config.stop_color[1];
+							xferdata.stop_color[2]		=	config.stop_color[2];
 							xferdata.step_value			= 	config.step_value;
 							xferdata.step_mode			=	config.step_mode;
 							xferdata.no_of_cycles 		=	config.no_of_cycles;
@@ -419,7 +423,11 @@ void communication_task(void* pvParameter)
 										xferdata.step_mode = AUTO_UP;
 									}
 									config.start_color[0]		=	xferdata.start_color[0];
+									config.start_color[1]		=	xferdata.start_color[1];
+									config.start_color[2]		=	xferdata.start_color[2];
 									config.stop_color[0]		=	xferdata.stop_color[0];
+									config.stop_color[1]		=	xferdata.stop_color[1];
+									config.stop_color[2]		=	xferdata.stop_color[2];
 									config.step_value			= 	xferdata.step_value;
 									config.step_mode			=	xferdata.step_mode;
 									config.no_of_cycles 		=	xferdata.no_of_cycles;
