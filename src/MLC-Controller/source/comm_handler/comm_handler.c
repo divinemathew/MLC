@@ -345,6 +345,10 @@ void communication_task(void* pvParameter)
 						}
 						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));
 						xQueueSend(pattern_control_queue,&config,100);
+					}else if(config.control_mode==UP || config.control_mode==DOWN){
+						/*Control Byte Only*/
+						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));
+						xQueueSend(pattern_control_queue,&config,100);
 					}else if(config.control_mode!=temp_config.control_mode){
 						/*Control Byte Only*/
 						if(I2C_Handshake()){
@@ -356,9 +360,6 @@ void communication_task(void* pvParameter)
 						}
 						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));
 						xQueueSend(pattern_control_queue,&config,100);
-						if(xfer_status!=kStatus_Success){
-
-						}
 					}else{
 						/*HANDSHAKE + Send Full Config*/
 						if(I2C_Handshake()){
