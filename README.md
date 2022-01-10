@@ -5,9 +5,9 @@ Multicolor LED controller is POC designed and developed as part of DCT internal 
 To get the code, open terminal and copy paste the commands
 
 
-`sudo apt-get update`
-`sudo apt-get install git` 
-`cd /home/Desktop`
+`sudo apt-get update`  
+`sudo apt-get install git`  
+`cd /home/Desktop`  
 `git clone -b release_branch https://github.com/divinemathew/MLC`   
 
 ## Folder Structure
