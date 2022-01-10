@@ -473,9 +473,7 @@ void run_master_ui(void)
 	for ( ; ; ) {
 		xSemaphoreGive(console);
 		key_pressed = GETCHAR();
-		if (key_pressed != 0xFF) {
-			xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
-		}
+		xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 		switch (key_pressed) {
 
 			/* if read an escape sequence, check which escape sequence is received */
@@ -535,7 +533,7 @@ void run_master_ui(void)
 				 * The structure is send twice. Configuration is received if
 				 * the control command is zero and vice versa */
 				if (encode_config()) {
-					if (config_edited) {
+					if (config_edited || !device_connected) {
 						configuration.control_mode = NOP;
 						xQueueSend(communication_queue, &configuration, QUEUE_SEND_WAIT);
 						config_edited = false;
