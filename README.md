@@ -3,9 +3,7 @@
 Multicolor LED controller is POC designed and developed as part of DCT internal Training. This code is the software used to control a multicolor LED connected to FRDM 64 Development board at prescribed PWM Channels. All hardware mappings and code design documents are in the directory MLC/docs
 
 To get the code, open terminal and copy paste the commands
-
-
-`sudo apt-get update`  
+  
 `sudo apt-get install git`  
 `cd /home/Desktop`  
 `git clone -b release_branch https://github.com/divinemathew/MLC`   
