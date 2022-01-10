@@ -11,6 +11,7 @@
 * Revision History:
 * - 081221  DAM : Creation Date
 * - 091221  DAM : Initialization
+* - 221221  DAM : Major Bug Fix
 */
 
 #include "mlc_common.h"
@@ -48,8 +49,8 @@
 /***********************************
 * Public Variables
 ***********************************/
-uint8_t rx_buff[I2C_DATA_LENGTH];
-uint8_t slave_ID[2] ={0xBE,0xEF};
+uint8_t rx_buff[I2C_DATA_LENGTH]; /*Slave Receive Buffer*/
+uint8_t slave_ID[2] ={0xBE,0xEF}; /*Slave  ID*/
 
 /***********************************
 * Private Variables
@@ -87,6 +88,7 @@ void i2c_master_init(void);
 *
 * Revision History:
 * - 081221  DAM : Creation Date
+*
 */
 void i2c_pin_config(void)
 {
@@ -132,7 +134,7 @@ void i2c_pin_config(void)
 * Revision History:
 * - 081221  DAM : Creation Date
 */
-void i2c_slave_init()
+void i2c_slave_init(void)
 {
     i2c_slave_config_t slave_config;
     i2c_pin_config();
@@ -202,6 +204,25 @@ status_t I2C_write(uint32_t offset,uint8_t add_size,uint8_t* data,uint8_t data_s
 	return i2c_writestatus;
 }
 
+
+/**
+* @I2C_read
+* @brief 
+*
+* This function is used for read from slave
+*
+*
+* @param 
+* @return status_t - 1 -> if I2C read successful
+*
+* @note
+*
+* Revision History:
+* - 081221  DAM : Creation Date
+* - 091221  DAM	: Buff Fix
+*
+*/
+
 status_t I2C_read(uint32_t offset,uint8_t add_size,uint8_t* data,uint8_t data_size)
 {
 	i2c_master_transfer_t masterXfer;
@@ -218,6 +239,25 @@ status_t I2C_read(uint32_t offset,uint8_t add_size,uint8_t* data,uint8_t data_si
 }
 
 
+
+
+/**
+* @I2C_Handshake
+* @brief 
+*
+* This function is used for the handshake between master and slave
+*
+*
+* @param 
+* @return Bool - True -> if handshake Successful | False -> If Handshake fails
+*
+* @note
+*
+* Revision History:
+* - 081221  DAM : Creation Date
+* - 091221  DAM	: Slave Detection 
+* - 101221  DAM : Master Detection by slave
+*/
 _Bool I2C_Handshake(void)
 {
 	uint8_t rx_data[2];
@@ -257,6 +297,12 @@ _Bool I2C_Handshake(void)
 *
 * Revision History:
 * - 081221  DAM : Creation Date
+* - 091221  DAM : Implimented Address Match Event
+* - 101221  DAM : Imlimented Slave Receive Event
+* - 131221  DAM : Slave Read / Master Write Successful
+* - 141221  DAM : Transmit Event Complete 
+* - 151221  DAM : Slave Trasmit Successful 
+* - 161221  DAM : Completion Event added for task checking
 */
 
 static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void *userData)
@@ -297,10 +343,6 @@ static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void 
 
 
 
-
-
-
-
 /**
 * @communication_task
 * @brief 
@@ -313,7 +355,13 @@ static void i2c_slave_callback(I2C_Type *base, i2c_slave_transfer_t *xfer, void 
 * @note
 *
 * Revision History:
-* - 081221  DAM : Creation Date
+* - 101221  DAM : Creation Date
+* - 161221  DAM : Slave Initilisation added
+* - 171221  DAM : Master mode slave mode 
+* - 181221  DAM : Created Rough Skeleton
+* - 191221  DAM : Minor Fix in sending data to pattern queue
+* - 201221  DAM : Added handshake when PAUSE or Contiue is pressed
+* - 041221  DAM : Send Config to slave if CONTINUE is pressed when a new slave connected
 */
 
 
@@ -334,37 +382,39 @@ void communication_task(void* pvParameter)
 			/*MASTER MODE*/
 			i2c_master_init();
 			while(true){
+				/*Checking if new data is recevied from the UI*/
 				if(xQueueReceive(communication_queue, &config, 0)==pdPASS){
 					if(config.control_mode==START){
 						if(I2C_Handshake()){
 							device_status=true;
-							xQueueSend(device_status_queue,&device_status,100);
+							xQueueSend(device_status_queue,&device_status,100); /*Sending device connection status to UI*/
 						}else {
 							device_status=false;
-							xQueueSend(device_status_queue,&device_status,100);
+							xQueueSend(device_status_queue,&device_status,100); /*Sending device connection status to UI*/
 						}
-						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));
-						xQueueSend(pattern_control_queue,&config,100);
+						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t)); /*Performing I2C Write*/
+						xQueueSend(pattern_control_queue,&config,100);		/*Sending data to pattern execution*/
 					}else if(config.control_mode==UP || config.control_mode==DOWN){
 						/*Control Byte Only*/
-						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));
-						xQueueSend(pattern_control_queue,&config,100);
+						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));  /*Performing I2C Write*/
+						xQueueSend(pattern_control_queue,&config,100); 		/*Sending data to pattern execution*/
 					}else if(config.control_mode!=temp_config.control_mode){
 						/*Control Byte Only*/
 						if(I2C_Handshake()){
 							device_status=true;
-							xQueueSend(device_status_queue,&device_status,100);
+							xQueueSend(device_status_queue,&device_status,100); /*Sending device connection status to UI*/
 						}else {
 							device_status=false;
-							xQueueSend(device_status_queue,&device_status,100);
+							xQueueSend(device_status_queue,&device_status,100); /*Sending device connection status to UI*/
 						}
-						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));
-						xQueueSend(pattern_control_queue,&config,100);
+						xfer_status = I2C_write(CONTROL_MODE_OFFSET, 1,(uint8_t*) &config.control_mode, sizeof(uint8_t));  /*Performing I2C Write*/
+						xQueueSend(pattern_control_queue,&config,100);		/*Sending device connection status to UI*/
 					}else{
 						/*HANDSHAKE + Send Full Config*/
 						if(I2C_Handshake()){
 							device_status = true;
-							xQueueSend(device_status_queue,&device_status,100);
+							xQueueSend(device_status_queue,&device_status,100); /*Sending device connection status to UI*/
+							/*Transfering data to Transmit Structure from Internal Data Structure to send via I2C*/
 							xferdata.start_color[0]		=	config.start_color[0];
 							xferdata.stop_color[0]		=	config.stop_color[0];
 							xferdata.step_value			= 	config.step_value;
@@ -377,11 +427,11 @@ void communication_task(void* pvParameter)
 							xfer_status = I2C_write(CONFIG_OFFSET, 1, (uint8_t*)&xferdata, sizeof(xferdata));
 							if (xfer_status !=kStatus_Success) {
 							}
-							xQueueSend(pattern_control_queue,&config,100);
+							xQueueSend(pattern_control_queue,&config,100); 	/*Sending data to pattern execution*/
 						}else{
 							device_status = false;
-							xQueueSend(device_status_queue,&device_status,0);
-							xQueueSend(pattern_control_queue,&config,100);
+							xQueueSend(device_status_queue,&device_status,0); /*Sending device connection status to UI*/
+							xQueueSend(pattern_control_queue,&config,100); /*Sending data to pattern execution*/
 						}
 					}
 				} else {
@@ -400,14 +450,14 @@ void communication_task(void* pvParameter)
 					if(g_SlaveCompletionFlag==true){
 						switch (rx_buff[0]) {
 							case 0x00:
-								device_status = true;
-								xQueueSend(device_status_queue,&device_status,0);
+								//device_status = true;
+								//xQueueSend(device_status_queue,&device_status,0);
 								g_SlaveCompletionFlag=false;
 								break;
 							case 0x02:
 								if(rx_buff[1]==0xDE && rx_buff[2]==0xAD){
 									device_status = true;
-									xQueueSend(device_status_queue,&device_status,0);
+									xQueueSend(device_status_queue,&device_status,0); /*Sedning device connection status to UI*/
 								}
 								g_SlaveCompletionFlag=false;
 								break;
@@ -418,6 +468,7 @@ void communication_task(void* pvParameter)
 									} else if(xferdata.step_mode ==AUTO_DOWN){
 										xferdata.step_mode = AUTO_UP;
 									}
+									/*Transfering I2C Received data to the data structure which is used for internal task communication*/
 									config.start_color[0]		=	xferdata.start_color[0];
 									config.stop_color[0]		=	xferdata.stop_color[0];
 									config.step_value			= 	xferdata.step_value;
@@ -427,11 +478,12 @@ void communication_task(void* pvParameter)
 									config.refresh_rate 		=	xferdata.refresh_rate;
 									config.color_scheme			=	xferdata.color_scheme;
 									config.control_mode=NOP;
-									xQueueSend(pattern_control_queue,&config,0);
-									xQueueSend(communication_queue,&config,0);
+									xQueueSend(pattern_control_queue,&config,0);	/*Sending data to pattern execution*/
+									xQueueSend(communication_queue,&config,0);	/*Sedning data to UI*/
 									g_SlaveCompletionFlag=false;
 									break;
 								case 0x11:
+								/*Receive Control Bit From I2C*/
 									config.control_mode = rx_buff[1];
 									if(config.step_mode==MANUAL){
 										if(config.control_mode==UP){
@@ -440,8 +492,8 @@ void communication_task(void* pvParameter)
 											config.control_mode=UP;
 										}
 									}
-									xQueueSend(pattern_control_queue,&config,0);
-									xQueueSend(communication_queue,&config,0);
+									xQueueSend(pattern_control_queue,&config,0); 	/*Sending data to pattern execution*/
+									xQueueSend(communication_queue,&config,0);  	/*Sedning data to UI*/
 									g_SlaveCompletionFlag=false;
 									break;
 								default:
