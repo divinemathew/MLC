@@ -12,9 +12,9 @@ To get the code, open terminal and copy paste the commands
 
 ## Folder Structure
 
-Documents             -     MLC/docs
-Release Binary        -     MLC/binaries
-Source Code           -     MLC/src
+Documents             -     MLC/docs  
+Release Binary        -     MLC/binaries  
+Source Code           -     MLC/src  
 
 
 ## Core of Software 
