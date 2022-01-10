@@ -473,9 +473,7 @@ void run_master_ui(void)
 	for ( ; ; ) {
 		xSemaphoreGive(console);
 		key_pressed = GETCHAR();
-		if (key_pressed != 0xFF) {
-			xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
-		}
+		xSemaphoreTake(console, CONSOLE_SEMAPHORE_WAIT);
 		switch (key_pressed) {
 
 			/* if read an escape sequence, check which escape sequence is received */
