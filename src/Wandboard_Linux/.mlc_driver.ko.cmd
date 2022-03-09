@@ -1,1 +1,0 @@
-cmd_/home/divine/Desktop/MLC/src/Wandboard_Linux/mlc_driver.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/divine/Desktop/MLC/src/Wandboard_Linux/mlc_driver.ko /home/divine/Desktop/MLC/src/Wandboard_Linux/mlc_driver.o /home/divine/Desktop/MLC/src/Wandboard_Linux/mlc_driver.mod.o ;  true
