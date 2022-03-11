@@ -8,15 +8,35 @@
 #include <linux/i2c.h>
 #include <linux/kernel.h>
 #include <linux/ioctl.h>
+#include <linux/jiffies.h>
+#include <linux/gpio.h>     //GPIO
+#include <linux/interrupt.h>
+
+
 
 #define DRIVER_NAME "mlc"
 #define DRIVER_CLASS "mlcClass"
+#define LED1_GPIO     90	/*GPIO3_26*/
+#define LED2_GPIO     200	/*GPIO7_8*/
+#define LED3_GPIO     24	/*GPIO1_24*/
+#define PUSH_BUTTON   91	/*GPIO3_27*/
+#define START		  0x01
+#define STOP		  0x02
+
 
 
 static struct i2c_adapter * 	mlc_i2c_adapter = NULL;
 static struct i2c_client * 		mlc_i2c_client = NULL;
 static char *device_name 	= 	"MLC";
 static int major_number 	= 	0;
+
+
+/*irqnumber for Push button*/
+unsigned int GPIO_irqNumber;
+//extern unsigned long jiffies;
+unsigned long jiffie_before = 0;
+
+
 
 
 MODULE_AUTHOR("Divine A. Mathew");
@@ -55,8 +75,13 @@ led_config_type check;
 char master_ID[3];
 char command[2];
 
-static long driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
+
+void switch_init(void);
+
+
+static long driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+static irqreturn_t push_button_irq_handler(int irq, void *dev_id);
 
 
 static const struct i2c_device_id bmp_id[] = {
@@ -94,6 +119,77 @@ static int driver_close(struct inode *deviceFile, struct file *instance) {
 }
 
 
+
+void switch_init(){
+
+/*checking gpio numbers valid or not*/
+	if(gpio_is_valid(LED1_GPIO) == false){
+		printk(KERN_INFO "invalid gpio\n");
+	}
+
+	if(gpio_is_valid(LED2_GPIO) == false){
+		printk(KERN_INFO "invalid gpio\n");
+	}
+
+	if(gpio_is_valid(LED3_GPIO) == false){
+		printk(KERN_INFO "invalid gpio\n");
+	}
+
+	if(gpio_is_valid(PUSH_BUTTON) == false){
+		printk(KERN_INFO "invalid gpio\n");
+	}
+
+	/*requesting required gpios*/
+	gpio_request(LED1_GPIO, "led1_gpio");
+	gpio_request(LED2_GPIO, "led2_gpio");
+	gpio_request(LED3_GPIO, "led3_gpio");
+	gpio_request(PUSH_BUTTON, "push_button_gpio");
+
+	/*setting pin gpio directions*/
+	gpio_direction_output(LED1_GPIO, 0);
+	gpio_direction_output(LED2_GPIO, 0);
+	gpio_direction_output(LED3_GPIO, 0);
+	gpio_direction_input(PUSH_BUTTON);
+	GPIO_irqNumber = gpio_to_irq(PUSH_BUTTON);
+	if(request_irq(GPIO_irqNumber, (void*)push_button_irq_handler, IRQF_TRIGGER_RISING, "my_device", NULL)) {
+
+		printk(KERN_INFO "irq request failed\n");
+	}
+
+}
+
+
+static irqreturn_t push_button_irq_handler(int irq, void *dev_id)
+{	
+	unsigned long diff;
+	
+	/*checking debounce*/
+	diff = jiffies - jiffie_before;
+	if(diff < msecs_to_jiffies(200)) {
+		return IRQ_HANDLED;
+	}
+	jiffie_before = jiffies;
+
+	gpio_set_value(LED1_GPIO, 1^gpio_get_value(LED1_GPIO));	
+	gpio_set_value(LED2_GPIO, 1^gpio_get_value(LED2_GPIO));			
+	gpio_set_value(LED3_GPIO, 1^gpio_get_value(LED3_GPIO));
+
+	printk(KERN_INFO "entered in interrupt handler\n");
+	switch(command[1]){
+		case 0x00:
+			command[1]=START;
+			break;
+		case START:
+			command[1]=STOP;
+			break;
+		case STOP:
+			command[1]=START;
+			break;
+	}
+	i2c_master_send(mlc_i2c_client,(u8 *)&command,3);
+	return IRQ_HANDLED;
+}
+
 static struct file_operations fops_mydevice = {
 	.owner = THIS_MODULE,
 	.open = driver_open,
@@ -101,6 +197,10 @@ static struct file_operations fops_mydevice = {
 	//.read = driver_read,
 	.unlocked_ioctl = driver_ioctl,
 };
+
+
+
+
 
 
 static long driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
@@ -165,6 +265,7 @@ static int __init ModuleInit(void) {
 	master_ID[0]=0x02;
 	master_ID[1]=0xDE;
 	master_ID[2]=0xAD;
+	command[1]=0x00;
 	xfer_config.offset=0x04;
 	xfer_config.start_color[0]=0xFF;
 	xfer_config.no_of_cycles = 4;
@@ -174,7 +275,7 @@ static int __init ModuleInit(void) {
 	major_number=register_chrdev(0, device_name, &fops_mydevice);	
 	printk(KERN_INFO "\nMajor Number %d",major_number);	
 	mlc_i2c_adapter = i2c_get_adapter(I2C_BUS_AVAILABLE);
-
+	switch_init();
 	if(mlc_i2c_adapter != NULL) {
 		mlc_i2c_client = i2c_new_device(mlc_i2c_adapter, &mlc_i2c_board_info);
 		if(mlc_i2c_client != NULL) {
@@ -197,6 +298,11 @@ static int __init ModuleInit(void) {
 
 static void __exit ModuleExit(void) {
 	printk("MyDeviceDriver - Goodbye, Kernel!\n");
+	free_irq(GPIO_irqNumber, NULL);
+	gpio_free(PUSH_BUTTON);
+	gpio_free(LED1_GPIO);
+	gpio_free(LED2_GPIO);
+	gpio_free(LED3_GPIO);
 	i2c_unregister_device(mlc_i2c_client);
 	i2c_del_driver(&mlc_driver);
 	unregister_chrdev(major_number, device_name);

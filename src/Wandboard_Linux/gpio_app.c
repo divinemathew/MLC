@@ -76,7 +76,7 @@ int main()
         fd = open("/dev/mydevice", O_RDWR);
 		
 		ioctl(fd,HANDSHAKE,(int32_t *)&default_config);
-		ioctl(fd,CONF_XFER,(int32_t *)xfer_buff);
+//		ioctl(fd,CONF_XFER,(int32_t *)xfer_buff);
 //		ioctl(fd,COMM_XFER,(int32_t *)&default_config);
 /*  		while(1){
 		switch(number){
