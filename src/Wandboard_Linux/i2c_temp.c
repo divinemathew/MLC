@@ -44,6 +44,7 @@ typedef struct {
 } led_config_type;
 
 led_config_type xfer_config;
+u16 master_ID = 0xDEAD;
 
 static long driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
@@ -162,7 +163,8 @@ static long driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						printk(KERN_INFO "\nNo of cycles : %d",xfer_config.no_of_cycles);
 						printk(KERN_INFO "\nStart Color: %x",xfer_config.start_color[0]);
 						printk(KERN_INFO "\nStop Color: %x",xfer_config.stop_color[0]);
-						int ret_1 = i2c_smbus_write_block_data(bmp280_i2c_client,0x04,sizeof(xfer_config),(const u8 *)&xfer_config);					
+//						int ret_1 = i2c_smbus_write_block_data(bmp280_i2c_client,0x04,sizeof(led_config_type),(const u8 *)&xfer_config);					
+						int ret_1 = i2c_smbus_write_block_data(bmp280_i2c_client,0x02,2,(const u8 *)&master_ID);
 						printk(KERN_INFO "I2C return Val%d",ret_1);
 						dig_T1 = i2c_smbus_read_word_data(bmp280_i2c_client, 0x00);
 						printk(KERN_INFO "\nRead Value from slave %x",dig_T1);
@@ -170,6 +172,9 @@ static long driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						printk(KERN_INFO "\nI2C return Value %x",ret);
 						int ret_2 = i2c_smbus_write_byte_data(bmp280_i2c_client, 0x03,0xAD);
 						printk(KERN_INFO "\nI2C return Value %x",ret_2);
+						i2c_smbus_write_byte_data(bmp280_i2c_client, 0x11,0x01);
+						printk(KERN_INFO "\nI2C return Value %x",ret_2);
+						i2c_master_send(bmp280_i2c_client,(const char*)&xfer_config,sizeof(led_config_type));
 						break;
                 default:
                         pr_info("Default\n");
@@ -192,6 +197,11 @@ static int __init ModuleInit(void) {
 	printk(KERN_INFO "\nMajor Number %d",major_number);	
 	bmp_i2c_adapter = i2c_get_adapter(I2C_BUS_AVAILABLE);
 
+	
+	xfer_config.start_color[0]	=	0xAA;
+	xfer_config.stop_color[0]	=	0xBB;
+	xfer_config.no_of_cycles	=	4;
+	xfer_config.control_mode	=	0x01;
 	if(bmp_i2c_adapter != NULL) {
 		bmp280_i2c_client = i2c_new_device(bmp_i2c_adapter, &bmp_i2c_board_info);
 		if(bmp280_i2c_client != NULL) {
@@ -242,10 +252,6 @@ static void __exit ModuleExit(void) {
 	printk("MyDeviceDriver - Goodbye, Kernel!\n");
 	i2c_unregister_device(bmp280_i2c_client);
 	i2c_del_driver(&bmp_driver);
-	cdev_del(&myDevice);
-    device_destroy(myClass, myDeviceNr);
-    class_destroy(myClass);
-    unregister_chrdev_region(myDeviceNr, 1);
 }
 
 module_init(ModuleInit);

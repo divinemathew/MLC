@@ -12,11 +12,12 @@
 #define BLU_TOOGLE _IOW('a','b',int32_t*)
 #define YEL_TOOGLE _IOW('a','c',int32_t*)
 #define SWITCH_RED _IOR('a','d',int32_t*)
-#define HANDSHK_S  _IOR('a','e',int32_t*)
-#define HANDSHK_M  _IOW('a','f',int32_t*)
-#define CONF_XFER  _IOW('a','g',int32_t*)
+#define CONF_XFER  _IOW('a','e',int32_t*)
+#define HANDSHAKE  _IOW('a','f',int32_t*)
+#define COMM_XFER  _IOW('a','g',int32_t*)
 
 typedef struct {
+	uint8_t offset;
 	uint8_t start_color[3];
 	uint8_t stop_color[3];
 	uint8_t step_value;
@@ -29,7 +30,7 @@ typedef struct {
 } led_config_type;
 
 led_config_type default_config;
-
+led_config_type check;
 
 _Bool read_switch(int fd){
 	_Bool value;
@@ -41,19 +42,25 @@ _Bool read_switch(int fd){
 int main()
 {		FILE* dtb;
 		
+		int32_t* xfer_buff;
         int fd,switch_fd;
 		_Bool switch_val;
         int32_t value, number;
-		default_config.start_color[0]	= 	0xAA;
-		default_config.stop_color[0]	=	0xFF;
+		default_config.offset			=	0x04;
+		default_config.start_color[0]	= 	0x01;
+		default_config.stop_color[0]	=	0x03;
 		default_config.step_value		=	0x10;
 		default_config.step_mode		=	0x00;
-		default_config.no_of_cycles		=	10;
+		default_config.no_of_cycles		=	0x4;
 		default_config.color_change_rate=	0;
 		default_config.refresh_rate		=	0;
 		default_config.color_scheme		=	0;
-		default_config.control_mode		=	0;
-
+		default_config.control_mode		=	0x00;
+		
+//		memcpy(xfer_buff,&default_config,sizeof(default_config));
+		xfer_buff = (int32_t *)&default_config;
+		check = *(led_config_type *)xfer_buff;
+		printf("\nCheck.StartColor = %x",check.stop_color[0]); 
 		dtb = fopen("database.txt","rw");
 		if(dtb == NULL){
 			printf("\nError Opening File");
@@ -68,7 +75,9 @@ int main()
         printf("\nOpening Driver\n");
         fd = open("/dev/mydevice", O_RDWR);
 		
-		ioctl(fd,CONF_XFER,(int32_t *)&default_config);
+		ioctl(fd,HANDSHAKE,(int32_t *)&default_config);
+		ioctl(fd,CONF_XFER,(int32_t *)xfer_buff);
+//		ioctl(fd,COMM_XFER,(int32_t *)&default_config);
 /*  		while(1){
 		switch(number){
 			case 1:
